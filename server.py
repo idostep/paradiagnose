@@ -357,10 +357,13 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, body, 'application/vnd.sqlite3', extra={'Content-Disposition': 'attachment; filename="cle-%s.db"' % time.strftime('%Y%m%d-%H%M')})
             if path == '/api/admin/votes':
                 keys = {r['key'] for r in c.execute("SELECT DISTINCT key FROM votes UNION SELECT key FROM adjust")}
+                who = {}
+                for r in c.execute("SELECT v.key, v.voter, v.vote, v.ts, COALESCE(p.initials,'') AS ini FROM votes v LEFT JOIN voters p ON p.voter=v.voter ORDER BY v.ts DESC"):
+                    who.setdefault(r['key'], []).append({'ini': r['ini'], 'voter': r['voter'][:6], 'vid': r['voter'], 'vote': r['vote'], 'ts': r['ts']})
                 out = []
                 for k in keys:
                     text, nid, nname, iid = resolve_key(c, k); tot = counts_for(c, k).get(k, {'u': 0, 'd': 0}); real = real_counts(c, k)
-                    out.append({'key': k, 'text': text, 'node': nid, 'node_name': nname, 'u': tot['u'], 'd': tot['d'], 'real_u': real['u'], 'real_d': real['d']})
+                    out.append({'key': k, 'text': text, 'node': nid, 'node_name': nname, 'u': tot['u'], 'd': tot['d'], 'real_u': real['u'], 'real_d': real['d'], 'who': who.get(k, [])})
                 out.sort(key=lambda x: -(x['u'] + x['d']))
                 return self.send(200, out)
             if path in ('/api/admin', '/api/admin/overview'):

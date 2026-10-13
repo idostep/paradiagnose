@@ -26,7 +26,7 @@ Puis ouvrir `https://ton-domaine/admin` et se connecter. La session est un cooki
 ## Interface d'administration (`/admin`)
 - **Suggestions** : date/heure de chaque proposition ; filtres En attente / Approuvées / Refusées ; corriger le texte, choisir le groupe et « distinctif », Approuver, Refuser, Retirer, Remettre en attente, Supprimer (un par un, par sélection, ou « tout purger »).
 - **Signalements** : regroupés par critère (motifs, commentaires, likes/dislikes) ; marquer traité, masquer/réafficher le critère, supprimer.
-- **Votes** : fixer le nombre de 👍/👎 affichés d'un critère (les vrais votes restent dans la base, l'écart va dans `adjust`) ou remettre à zéro.
+- **Votes** : vue « Par critère » (avec le détail de qui a liké ou disliké, initiales et date) et « Par personne » (tout ce qu’une personne a voté) ; fixer le nombre de 👍/👎 affichés d'un critère (les vrais votes restent dans la base, l'écart va dans `adjust`) ou remettre à zéro.
 - **Critères** : modifier/ajouter/masquer les critères d'une étape.
 - **Base de données** : **Exporter en JSON** (`cle-AAAAMMJJ-HHMM.json` : `{format, version, tables:{nom:[{colonne:valeur}]}}`, lisible et facile à convertir si le format change) ou en `.db` (copie SQLite brute). **Importer** accepte l'un ou l'autre (case + confirmation) et remplace le contenu ; à l'import JSON, les colonnes inconnues sont ignorées et les colonnes absentes prennent leur valeur par défaut. L'ancienne base est d'abord copiée à côté : `cle.db.avant-import-…`. Les comptes admin ne sont jamais exportés et sont conservés à l'import.
 
