@@ -1,6 +1,8 @@
 # Clé d'identification – serveur de votes
 
-Fichiers : `server.py` (serveur, Python 3, aucune dépendance), `index.html` (la page, légère, réglée pour parler à `/api` sur le même domaine), `assets/` (219 images, utilisées par la page). Copier le dossier `assets` en entier : `scp -r assets idostep@…:/var/www/paradiagnose/`.
+Tout le contenu (arbre, critères, notes, confusions, glossaire, légendes d'images) est dans la base SQLite `cle.db` ; `content.json` ne sert qu'à la remplir au tout premier lancement (si les tables sont vides). La page se construit à l'ouverture depuis `/api/content`. Modifier un critère = `/admin` (onglet Critères) ou SQL ; plus besoin de regénérer la page. Les votes sont liés à l'identifiant du critère : on peut le reformuler sans perdre ses votes. Reste dans la page (pas dans la base) : l'onglet Rappels, les textes d'intro et le pied de page.
+
+Fichiers : `server.py` (serveur, Python 3, aucune dépendance), `content.json` (contenu de départ), `index.html` (la page, légère, réglée pour parler à `/api` sur le même domaine), `assets/` (219 images, utilisées par la page). Copier le dossier `assets` en entier : `scp -r assets idostep@…:/var/www/paradiagnose/`.
 
 ## Lancer
     python3 server.py            # écoute sur 127.0.0.1:8765, base SQLite cle.db créée à côté
@@ -16,8 +18,8 @@ Si la page est sur un autre domaine que l'API : lance avec `ALLOWED_ORIGIN=https
 ## Variables
 `PORT` (8765) · `HOST` (127.0.0.1) · `DB` (cle.db) · `ALLOWED_ORIGIN` (*) · `ADMIN_TOKEN` (vide) · `STATIC` (index.html)
 
-## Valider les suggestions de critères
-Chaque suggestion est enregistrée avec `approved = 0` : **invisible** tant que tu ne l'as pas approuvée. Lance le serveur avec `ADMIN_TOKEN=un-secret`, ouvre `https://ton-domaine/admin?token=un-secret` et clique sur « Approuver » : le critère apparaît aussitôt dans l'étape concernée pour tous les visiteurs (avec un ✚), avec ses propres boutons de vote. « Retirer » le fait disparaître.
+## Modifier les critères et valider les suggestions
+Chaque suggestion est enregistrée avec `approved = 0` : **invisible** tant que tu ne l'as pas approuvée. Lance le serveur avec `ADMIN_TOKEN=un-secret`, ouvre `https://ton-domaine/admin?token=un-secret` onglet **Suggestions** : « Approuver » crée le critère (table `items`) et il apparaît aussitôt; onglet **Critères** : choisir une étape, modifier le texte, le groupe (œil nu / microscope / autre), « distinctif », « visible », ajouter un critère. Pour une suggestion approuvée : le critère apparaît aussitôt dans l'étape concernée pour tous les visiteurs (avec un ✚), avec ses propres boutons de vote. « Retirer » le fait disparaître.
 En SQL : `sqlite3 cle.db "update suggestions set approved=1 where id=3"`.
 
 ## Lire les suggestions et signalements
