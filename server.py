@@ -154,7 +154,8 @@ LOGIN_HITS = {}
 def login_blocked(ip):
     now = time.time(); h = [t for t in LOGIN_HITS.get(ip, []) if now - t < 300]
     LOGIN_HITS[ip] = h
-    return len(h) >= 8
+    tot = sum(1 for v in LOGIN_HITS.values() for t in v if now - t < 300)
+    return len(h) >= 8 or tot >= 40      # par IP, et au total (IP falsifiées)
 
 SYNC_TABLES = ['meta', 'nodes', 'node_kids', 'items', 'node_images', 'glossary', 'votes', 'suggestions', 'reports', 'adjust']
 
@@ -231,7 +232,36 @@ def resolve_key(c, key):
         return text, nid, (r['t'] if r else nid), None
     return key, None, None, None
 
+def valid_key(c, key):
+    """n'accepte que des clés qui correspondent à un vrai critère / une vraie étape (évite de remplir la base avec n'importe quoi)"""
+    if key.startswith('c') and key[1:].isdigit(): return c.execute("SELECT 1 FROM items WHERE id=?", (int(key[1:]),)).fetchone() is not None
+    if '|' in key:
+        nid, text = key.split('|', 1)
+        return c.execute("SELECT 1 FROM items WHERE node_id=? AND text=?", (nid, text)).fetchone() is not None
+    return False
+
+def clean_text(t, n):
+    t = re.sub(r'[\x00-\x08\x0b-\x1f\x7f]', '', str(t or ''))      # caractères de contrôle
+    return t.strip()[:n]
+
+SEC_HEADERS = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'same-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Content-Security-Policy': "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+}
+
 class H(BaseHTTPRequestHandler):
+    timeout = 20          # coupe les connexions qui n'envoient rien (slowloris)
+    def end_headers(self):
+        for k, v in SEC_HEADERS.items(): self.send_header(k, v)
+        if self.headers.get('X-Forwarded-Proto') == 'https': self.send_header('Strict-Transport-Security', 'max-age=31536000')
+        super().end_headers()
+    def body_len(self, limit):
+        try: n = int(self.headers.get('Content-Length', '0'))
+        except ValueError: return None
+        return n if 0 <= n <= limit else None
     server_version = 'cle/1.0'
     def log_message(self, *a): pass
     def ip(self):
@@ -243,9 +273,10 @@ class H(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(body)))
         for k, v in (extra or {}).items(): self.send_header(k, v)
         if self.path.startswith('/api/admin') or self.path == '/admin': self.send_header('Cache-Control', 'no-store')
-        self.send_header('Access-Control-Allow-Origin', ORIGIN)
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        if not (self.path.startswith('/api/admin') or self.path == '/admin'):
+            self.send_header('Access-Control-Allow-Origin', ORIGIN)
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.end_headers(); self.wfile.write(body)
     def session_user(self):
         m = re.search(r'(?:^|;\s*)adm=([\w\-]+)', self.headers.get('Cookie', ''))
@@ -433,16 +464,17 @@ class H(BaseHTTPRequestHandler):
         if too_many(self.ip()): return self.send(429, {'error': 'trop de requêtes'})
         if urlparse(self.path).path == '/api/admin/import':
             if not self.admin_ok(write=True): return self.send(403, {'error': 'interdit'})
-            n = int(self.headers.get('Content-Length', '0'))
-            if n > 200_000_000: return self.send(413, {'error': 'fichier trop gros'})
+            n = self.body_len(200_000_000)
+            if n is None: return self.send(413, {'error': 'taille invalide ou fichier trop gros'})
             try: counts, backup = import_db_bytes(self.rfile.read(n))
             except ValueError as e: return self.send(400, {'error': str(e)})
             except Exception as e: return self.send(500, {'error': 'Import impossible : ' + str(e)})
             return self.send(200, {'ok': True, 'counts': counts, 'backup': backup})
         try:
-            n = int(self.headers.get('Content-Length', '0'))
-            if n > 20000: return self.send(413, {'error': 'trop gros'})
+            n = self.body_len(20000)
+            if n is None: return self.send(413, {'error': 'trop gros'})
             d = json.loads(self.rfile.read(n) or b'{}')
+            if not isinstance(d, dict): raise ValueError
         except Exception:
             return self.send(400, {'error': 'json invalide'})
         pth = urlparse(self.path).path
@@ -476,17 +508,24 @@ class H(BaseHTTPRequestHandler):
         with LOCK, db() as c:
             if p == '/api/vote':
                 key = str(d.get('key', ''))[:300]; vote = d.get('vote')
-                if not key or vote not in ('u', 'd', None): return self.send(400, {'error': 'paramètres'})
+                if not key or vote not in ('u', 'd', None) or not valid_key(c, key): return self.send(400, {'error': 'paramètres'})
+                if c.execute("SELECT COUNT(*) FROM votes WHERE voter=?", (voter,)).fetchone()[0] > 5000: return self.send(429, {'error': 'limite atteinte'})
                 if vote is None: c.execute("DELETE FROM votes WHERE voter=? AND key=?", (voter, key))
                 else: c.execute("INSERT INTO votes(voter,key,vote,ts) VALUES(?,?,?,?) ON CONFLICT(voter,key) DO UPDATE SET vote=excluded.vote, ts=excluded.ts", (voter, key, vote, now))
                 return self.send(200, {'counts': counts_for(c, key) or {key: {'u': 0, 'd': 0}}})
             if p == '/api/suggest':
-                text = str(d.get('text', '')).strip()[:400]
+                text = clean_text(d.get('text'), 400)
                 if not text: return self.send(400, {'error': 'vide'})
-                c.execute("INSERT INTO suggestions(voter,node,text,ts,created_at) VALUES(?,?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch'))", (voter, str(d.get('id', ''))[:100], text, now, now))
+                nid = str(d.get('id', ''))[:100]
+                if not c.execute("SELECT 1 FROM nodes WHERE id=?", (nid,)).fetchone(): return self.send(400, {'error': 'étape inconnue'})
+                if c.execute("SELECT COUNT(*) FROM suggestions WHERE voter=? AND ts>?", (voter, now - 86400)).fetchone()[0] >= 20: return self.send(429, {'error': 'trop de suggestions aujourd’hui'})
+                if c.execute("SELECT COUNT(*) FROM suggestions WHERE approved=0 AND (status IS NULL OR status='' OR status='pending')").fetchone()[0] >= 2000: return self.send(429, {'error': 'file d’attente pleine'})
+                c.execute("INSERT INTO suggestions(voter,node,text,ts,created_at) VALUES(?,?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch'))", (voter, nid, text, now, now))
                 return self.send(200, {'ok': True})
             if p == '/api/report':
-                c.execute("INSERT INTO reports(voter,key,reason,comment,ts,created_at) VALUES(?,?,?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch'))", (voter, str(d.get('key', ''))[:300], str(d.get('reason', ''))[:50], str(d.get('comment', ''))[:400], now, now))
+                if not valid_key(c, str(d.get('key', ''))[:300]): return self.send(400, {'error': 'critère inconnu'})
+                if c.execute("SELECT COUNT(*) FROM reports WHERE voter=? AND ts>?", (voter, now - 86400)).fetchone()[0] >= 50: return self.send(429, {'error': 'trop de signalements'})
+                c.execute("INSERT INTO reports(voter,key,reason,comment,ts,created_at) VALUES(?,?,?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch'))", (voter, str(d.get('key', ''))[:300], clean_text(d.get('reason'), 50), clean_text(d.get('comment'), 400), now, now))
                 return self.send(200, {'ok': True})
         self.send(404, {'error': 'not found'})
 
