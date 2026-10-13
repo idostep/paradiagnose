@@ -47,7 +47,7 @@ button.b.d{color:var(--red);border-color:var(--red)}button.b.d:hover{background:
 <form id="lf"><input type="text" id="lu" placeholder="Identifiant" autocomplete="username" required><input type="password" id="lp" placeholder="Mot de passe" autocomplete="current-password" required>
 <div class="err" id="le"></div><button class="b p" style="width:100%">Se connecter</button></form></div>
 <div id="app" hidden>
-<header class="top"><h1>Administration</h1><span class="who" id="who"></span><button class="b" id="out">Se déconnecter</button></header>
+<header class="top"><h1>Administration</h1><span class="who" id="who"></span><a class="b" href="/" id="site" style="text-decoration:none;display:inline-block">← Voir le site</a><button class="b" id="out">Se déconnecter</button></header>
 <nav class="tabs"><div class="in"><button data-t="sg">Suggestions <span class="bd" id="bsg" hidden></span></button><button data-t="rp">Signalements <span class="bd" id="brp" hidden></span></button><button data-t="vt">Votes</button><button data-t="ed">Critères</button><button data-t="db">Base de données</button></div></nav>
 <main><section id="sg"></section><section id="rp" hidden></section><section id="vt" hidden></section><section id="ed" hidden></section><section id="db" hidden></section></main></div>
 <div id="toast"></div>
