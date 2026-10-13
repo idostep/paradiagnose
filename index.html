@@ -324,7 +324,7 @@ footer{color:var(--ink2);font-size:13px;margin-top:28px}
 <body>
 <header class="top">
   <h1>Diagnose parasitaire</h1>
-  <p>UC 321, TP1 à TP5. À chaque étape, les critères ★ viennent de la thèse : cite-les en premier. Viennent ensuite ceux d'un arbre, puis ▪ ceux du poly d'entomologie. Les mots <span class="gl" style="cursor:default">soulignés en pointillés</span> ouvrent leur définition.</p>
+  <p>UC 321, TP1 à TP5. À chaque étape, les critères ★ viennent de la thèse : cite-les en premier. Viennent ensuite ceux d'un arbre, puis ▪ ceux de l'arbre original. Les mots <span class="gl" style="cursor:default">soulignés en pointillés</span> ouvrent leur définition.</p>
 </header>
 <nav class="tabs" aria-label="Sections"><div class="in" role="tablist">
   <button role="tab" data-v="step" aria-selected="true">Clé pas à pas</button>
@@ -345,7 +345,7 @@ footer{color:var(--ink2);font-size:13px;margin-top:28px}
     <div id="cards"></div>
   </section>
   <section class="view" id="v-rap"><div id="rappels"></div></section>
-  <footer>Critères ★ : thèse, vérifiés par les enseignants (Ch. Faivre, 2026/2027). Structure : arbre (« TP tiques »), complété par les fiches. Figures : diaporamas des TP (Unité de Parasitologie-Mycologie). Compléments en gris : à vérifier avec le cours.</footer>
+  <footer>Critères ★ : thèse (Ch. Faivre, 2026/2027). Structure : arbre (« TP tiques »), complété par les fiches. Figures : diaporamas des TP (Unité de Parasitologie-Mycologie). Compléments en gris : à vérifier avec le cours.</footer>
 </main>
 
 <div class="gs" id="gs"><div class="gs-in" role="dialog" aria-modal="true" aria-labelledby="gs-t">
@@ -385,7 +385,7 @@ const isP = x => x.startsWith(PO);
 const isW = x => false;
 const isF = x => x.startsWith(FO);
 const clean = x => (isW(x)||isF(x)||isP(x)) ? x.slice(2) : x;
-function mark(x){ return isP(x) ? '<span class="pd" aria-label="poly">▪</span> ' : isF(x) ? '<span class="fd" aria-label="thèse">★</span> ' : isW(x) ? '<span class="wd" aria-label="arbre 2">◆</span> ' : ''; }
+function mark(x){ return isP(x) ? '<span class="pd" aria-label="arbre original">▪</span> ' : isF(x) ? '<span class="fd" aria-label="thèse">★</span> ' : isW(x) ? '<span class="wd" aria-label="arbre 2">◆</span> ' : ''; }
 const PAR = {}; for(const k in N) for(const c of (N[k].kids||[])) PAR[c]=k;
 const GRP = [['o','À l’œil nu ou à la loupe'],['m','Au microscope'],['a','Autres critères']];
 const critCode = (id,x) => (((CRIT[id]||{})[x]||'a')); 
@@ -402,7 +402,7 @@ function vrow(x){ return `<div class="vrow" data-k="${esc('sx|'+x)}">${inlHTML(x
 function inlHTML(x,id){ const s=mark(x)+esc(clean(x)); return id&&critDist(id,x) ? `<b class="dist">${s}${dflag(id,x)}</b>` : s; }
 function polyBox(id, list){
   const p=sortCrit(id,list.filter(isP)); if(!p.length) return '';
-  return `<details class="polymoi"><summary>+ ${p.length} critère${p.length>1?'s':''} du poly</summary><ul>${p.map(x=>`<li data-poly="1" data-g="${critGrp(id,x)}" data-k="${esc(KEYOF(id,x))}">${esc(clean(x))}${critDist(id,x)?' <span class="dg">⚑</span>':''}<span class="vbs"><span class="vn" title="likes − dislikes">0</span><button type="button" class="vb v-up" data-v="up" title="Distinctif / utile" aria-label="Distinctif / utile" aria-pressed="false"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4v-9zM7 11l4-8c1.5 0 2.5 1 2.2 2.6L12.7 9H19a2 2 0 0 1 2 2.4l-1.3 7A2 2 0 0 1 17.7 20H7"/></svg></button><button type="button" class="vb v-down" data-v="down" title="Pas distinctif" aria-label="Pas distinctif" aria-pressed="false"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13V4H4v9zM7 13l4 8c1.5 0 2.5-1 2.2-2.6L12.7 15H19a2 2 0 0 0 2-2.4l-1.3-7A2 2 0 0 0 17.7 4H7"/></svg></button><button type="button" class="vb v-flag" data-v="flag" title="Signaler une erreur" aria-label="Signaler une erreur" aria-pressed="false"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h13l-2 4 2 4H5"/></svg></button></span></li>`).join('')}</ul></details>`;
+  return `<details class="polymoi"><summary>+ ${p.length} critère${p.length>1?'s':''} de l'arbre original</summary><ul>${p.map(x=>`<li data-poly="1" data-g="${critGrp(id,x)}" data-k="${esc(KEYOF(id,x))}">${esc(clean(x))}${critDist(id,x)?' <span class="dg">⚑</span>':''}<span class="vbs"><span class="vn" title="likes − dislikes">0</span><button type="button" class="vb v-up" data-v="up" title="Distinctif / utile" aria-label="Distinctif / utile" aria-pressed="false"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4v-9zM7 11l4-8c1.5 0 2.5 1 2.2 2.6L12.7 9H19a2 2 0 0 1 2 2.4l-1.3 7A2 2 0 0 1 17.7 20H7"/></svg></button><button type="button" class="vb v-down" data-v="down" title="Pas distinctif" aria-label="Pas distinctif" aria-pressed="false"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 13V4H4v9zM7 13l4 8c1.5 0 2.5-1 2.2-2.6L12.7 15H19a2 2 0 0 0 2-2.4l-1.3-7A2 2 0 0 0 17.7 4H7"/></svg></button><button type="button" class="vb v-flag" data-v="flag" title="Signaler une erreur" aria-label="Signaler une erreur" aria-pressed="false"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h13l-2 4 2 4H5"/></svg></button></span></li>`).join('')}</ul></details>`;
 }
 function tabGroups(id, tab){
   const main=tab.filter(x=>!isP(x));
@@ -443,7 +443,7 @@ function blocks(id, withNotes=true){
   else if(id!==ROOT) h += `<p class="empty">Pas de critère écrit à cette étape.</p>`;
   const mo0=(n.moi||[]).filter(x=>!isP(x)), mo1=(n.moi||[]).filter(isP);
   if(mo0.length) h += `<div class="blk moi"><div class="lbl">Compléments</div><ul>${mo0.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
-  if(mo1.length) h += `<details class="polymoi"><summary>Compléments du poly (${mo1.length})</summary><ul>${mo1.map(x=>`<li>${esc(clean(x))}</li>`).join('')}</ul></details>`;
+  if(mo1.length) h += `<details class="polymoi"><summary>Compléments de l'arbre original (${mo1.length})</summary><ul>${mo1.map(x=>`<li>${esc(clean(x))}</li>`).join('')}</ul></details>`;
   return h;
 }
 
@@ -514,7 +514,7 @@ function fiche(id, p){
       <ol class="dr">${steps.map(s=>{ const m=N[s]; return `<li><span class="nm">${name(s)}${m.sexe?` <span class="sx">${esc(m.sexe)}</span>`:''}</span>
         ${stepTab(s).length?`<div class="tb">${(()=>{const l=GRP.flatMap(([g])=>stepTab(s).filter(x=>!isP(x)&&critGrp(s,x)===g)); return l.length?`<ul class="tgl tg-a">${l.map(x=>`<li data-k="${esc(KEYOF(s,x))}" data-g="${critGrp(s,x)}"${critDist(s,x)?' data-b="3"':''}>${inlHTML(x,s)}${VB}</li>`).join('')}</ul>`:'';})()}${polyBox(s,stepTab(s))}${SUG(s)}</div>`:''}
         ${m.moi&&m.moi.filter(x=>!isP(x)).length?`<span class="mo">Compléments : ${m.moi.filter(x=>!isP(x)).map(esc).join(' ; ')}</span>`:''}</li>`; }).join('')}</ol>
-      ${(()=>{ const g=steps.map(s=>[s,(N[s].moi||[]).filter(isP)]).filter(a=>a[1].length); return g.length?`<details class="polymoi"><summary>Compléments du poly (${g.reduce((a,b)=>a+b[1].length,0)})</summary>${g.map(([s,l])=>`<p style="margin:6px 0 0"><b>${name(s)}</b></p><ul>${l.map(x=>`<li>${esc(clean(x))}</li>`).join('')}</ul>`).join('')}</details>`:''; })()}
+      ${(()=>{ const g=steps.map(s=>[s,(N[s].moi||[]).filter(isP)]).filter(a=>a[1].length); return g.length?`<details class="polymoi"><summary>Compléments de l'arbre original (${g.reduce((a,b)=>a+b[1].length,0)})</summary>${g.map(([s,l])=>`<p style="margin:6px 0 0"><b>${name(s)}</b></p><ul>${l.map(x=>`<li>${esc(clean(x))}</li>`).join('')}</ul>`).join('')}</details>`:''; })()}
       ${sx ? `<h4>Mâle ou femelle ?</h4><div class="sexes"><div><b>Mâle</b>${sx.M.map(vrow).join('')}</div><div><b>Femelle</b>${sx.F.map(vrow).join('')}</div></div>` : ''}
       ${n.conf&&n.conf.length ? `<h4>Ne pas confondre avec</h4><ul>${n.conf.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>` : ''}
       ${n.bio ? `<h4>Hôte et importance</h4><p style="margin:0">${esc(n.bio)}</p>` : ''}
@@ -698,7 +698,7 @@ function vpaint(r){const v=VOTES[r.dataset.k];const vn=r.querySelector(':scope >
 function vsort(p){if(!p)return;const rs=[...p.children].filter(c=>c.dataset&&c.dataset.k);if(rs.length<2)return;rs.forEach((r,i)=>{if(r.dataset.i===undefined)r.dataset.i=i});const rk=r=>'oma'.indexOf(r.dataset.g||'a');const o=[...rs].sort((a,b)=>vscore(b)-vscore(a)||rk(a)-rk(b)||a.dataset.i-b.dataset.i);if(o.some((r,i)=>r!==rs[i])){const first=rs[0];o.forEach(r=>p.appendChild(r))}}
 function vgroupUl(wrap,g){const det=wrap.querySelector('details.polymoi');let ul=wrap.classList.contains('tb')?wrap.querySelector('ul.tgl'):[...wrap.children].find(c=>c.tagName==='UL');if(!ul){ul=document.createElement('ul');if(wrap.classList.contains('tb'))ul.className='tgl tg-a';wrap.insertBefore(ul,det)}return ul}
 function vhidUl(wrap){let d=wrap.querySelector('details.hidmoi');if(!d){d=document.createElement('details');d.className='polymoi hidmoi';d.innerHTML='<summary></summary><ul></ul>';const s=wrap.querySelector('.sug');if(s)wrap.insertBefore(d,s);else wrap.appendChild(d)}return d.querySelector('ul')}
-function vtidy(wrap){wrap.querySelectorAll('details.polymoi').forEach(d=>{const n=d.querySelectorAll('li').length;d.hidden=!n;const s=d.querySelector('summary');if(s)s.textContent='+ '+n+' critère'+(n>1?'s':'')+(d.classList.contains('hidmoi')?' masqué':' du poly')+(d.classList.contains('hidmoi')?(n>1?'s':''):'')});wrap.querySelectorAll('.gh').forEach(h=>{const u=h.nextElementSibling;const e=!(u&&u.querySelector('li'));h.style.display=e?'none':'';if(u&&u.tagName==='UL')u.style.display=e?'none':''});wrap.querySelectorAll('ul').forEach(u=>{if(!u.closest('details'))u.style.display=u.querySelector('li')?'':'none'})}
+function vtidy(wrap){wrap.querySelectorAll('details.polymoi').forEach(d=>{const n=d.querySelectorAll('li').length;d.hidden=!n;const s=d.querySelector('summary');if(s)s.textContent='+ '+n+' critère'+(n>1?'s':'')+(d.classList.contains('hidmoi')?' masqué':' de l\'arbre original')+(d.classList.contains('hidmoi')?(n>1?'s':''):'')});wrap.querySelectorAll('.gh').forEach(h=>{const u=h.nextElementSibling;const e=!(u&&u.querySelector('li'));h.style.display=e?'none':'';if(u&&u.tagName==='UL')u.style.display=e?'none':''});wrap.querySelectorAll('ul').forEach(u=>{if(!u.closest('details'))u.style.display=u.querySelector('li')?'':'none'})}
 const VTHR=3;
 function vflag(r){const net=(+r.dataset.b||0)+cnt(r.dataset.k,'u')-cnt(r.dataset.k,'d');const on=net>=VTHR;r.classList.toggle('dist',on);if(r.closest('.tb'))r.classList.toggle('distb',on);const bb=r.querySelector(':scope > b');if(bb&&(bb.classList.contains('dist')||bb.dataset.bd)){bb.dataset.bd=1;bb.classList.toggle('dist',on)}const s=r.querySelector('.dg');if(on&&!s){const f=document.createElement('span');f.className='dg';f.title='Critère distinctif (score ≥ '+VTHR+')';f.textContent='⚑';if(bb&&bb.dataset.bd)bb.appendChild(f);else r.insertBefore(f,r.querySelector('.vbs'))}else if(!on&&s)s.remove()}
 function vplace(r){if(!r.dataset.g)return;if(!r.__ul){r.__ul=r.parentNode;r.__wrap=r.closest('.tabl,.tb')}const wrap=r.__wrap;if(!wrap)return;const k=r.dataset.k,net=(+r.dataset.b||0)+cnt(k,'u')-cnt(k,'d'),dis=net<=-DTHR,lik=(cnt(k,'u')-cnt(k,'d'))>=1;let target;
@@ -737,9 +737,9 @@ m.addEventListener('submit',e=>{e.preventDefault();const nt=m.querySelector('.rp
  const send=v=>{if(API!==null)api('/api/profile',{voter:VID,initials:v})};
  const FLAG='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M5 21V4M5 4h13l-2 4 2 4H5"/></svg>';
  const P=[
-  ['★','Les étoiles','<p>Un critère marqué <b>★</b> est décrit dans <b>la thèse</b> et a été vérifié par des enseignants : cite-le en premier.</p><p>Un <b>▪</b> vient du poly d’entomologie. Sans marque, le critère vient de l’arbre.</p>'],
+  ['★','Les étoiles','<p>Un critère marqué <b>★</b> est décrit dans <b>la thèse</b> : cite-le en premier.</p><p>Un <b>▪</b> vient de <b>l’arbre original</b>. Sans marque, le critère vient d’un arbre.</p>'],
   ['👍 👎','Like / dislike','<p><b>👍</b> si le critère est juste et utile, <b>👎</b> s’il ne l’est pas.</p><p>Un seul vote par critère : tu peux le changer ou le retirer en recliquant.</p><p>Le chiffre affiché est <b>likes − dislikes</b> ; les critères sont triés par ce score.</p>'],
-  ['<span class="hdg">⚑</span>','Critères distinctifs','<p>Un critère <b>distinctif</b> permet de séparer ce taxon d’un autre. Il reçoit un <b>drapeau jaune</b> et un surlignage quand son score atteint <b>3</b>, et le perd si le score retombe.</p><p>À <b>−3</b>, un critère est <b>masqué</b> (dans une liste dépliable : rien n’est supprimé). Un critère du poly sort de sa liste dès qu’il a un like de plus que de dislikes.</p>'],
+  ['<span class="hdg">⚑</span>','Critères distinctifs','<p>Un critère <b>distinctif</b> permet de séparer ce taxon d’un autre. Il reçoit un <b>drapeau jaune</b> et un surlignage quand son score atteint <b>3</b>, et le perd si le score retombe.</p><p>À <b>−3</b>, un critère est <b>masqué</b> (dans une liste dépliable : rien n’est supprimé). Un critère de l’arbre original (▪) sort de sa liste dès qu’il a un like de plus que de dislikes.</p>'],
   [FLAG,'Signaler','<p>Le petit <b>drapeau gris</b> à droite d’un critère sert à le signaler : information fausse, mal classé, doublon…</p><p>Tu peux aussi <b>proposer une correction du texte</b> : un administrateur la confirme avant que ça change.</p>'],
   ['＋','Proposer un critère','<p>Il manque un critère ? Clique sur <b>« + Suggérer un critère »</b> sous les listes.</p><p>Il apparaît pour tous dès qu’un administrateur l’a validé.</p>']];
  const m=document.createElement('div');m.className='rpm';m.hidden=true;m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');
