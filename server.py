@@ -7,7 +7,6 @@ Variables d'environnement (toutes facultatives) :
   HOST=127.0.0.1          adresse d'écoute (127.0.0.1 = derrière ton serveur web / reverse proxy)
   DB=cle.db               fichier SQLite
   ALLOWED_ORIGIN=*        origine autorisée (CORS) si la page est sur un autre domaine, ex. https://monsite.fr
-  ADMIN_TOKEN=            mot de passe de l'interface /admin (désactivée si vide)
   STATIC=index.html       page servie sur / (mettre vide pour désactiver)
   Les images sont servies depuis le dossier assets/ (à côté de server.py) sur /assets/...
 
@@ -22,12 +21,14 @@ API :
   POST /api/vote     {voter,key,vote}   vote = "u" | "d" | null (retirer)
   POST /api/suggest  {voter,id,text}    (créée avec approved=0 : invisible tant que tu ne l'approuves pas)
   POST /api/report   {voter,key,reason,comment}
-  GET  /admin                           interface d'administration (admin.html ; ADMIN_TOKEN requis)
-  API admin (en-tête X-Admin-Token) : GET overview | nodes | items?node=ID ;
-    POST suggestion {id,action: approve|reject|reset|delete,text,grp,dist} · report {id|key,action} ·
+  GET  /admin                           interface d'administration (admin.html) : identifiant + mot de passe
+  Comptes : python3 server.py adduser NOM | passwd NOM | deluser NOM | users
+  API admin (cookie de session) : POST login | logout ; GET me | overview | nodes | items?node=ID | votes ;
+    GET export (télécharger la base .db) · POST import (corps = fichier .db, remplace le contenu ; comptes admin conservés) ;
+    POST suggestion {id|ids,action: approve|reject|reset|delete,text,grp,dist} · purge {what: rejected|handled_reports|all_suggestions} · report {id|key,action} ·
     votes {key,u,d | reset} · item · node
 """
-import hmac, json, os, re, sqlite3, threading, time
+import getpass, hashlib, hmac, json, os, re, secrets, shutil, sqlite3, sys, tempfile, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -35,7 +36,7 @@ PORT = int(os.environ.get('PORT', '8765'))
 HOST = os.environ.get('HOST', '127.0.0.1')
 DB = os.environ.get('DB', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cle.db'))
 ORIGIN = os.environ.get('ALLOWED_ORIGIN', '*')
-ADMIN = os.environ.get('ADMIN_TOKEN', '')
+SESSION_HOURS = 12
 STATIC = os.environ.get('STATIC', 'index.html')
 HERE = os.path.dirname(os.path.abspath(__file__))
 VOTER_RE = re.compile(r'^[A-Za-z0-9\-]{8,64}$')
@@ -66,8 +67,17 @@ def init():
         except sqlite3.OperationalError: pass
         try: c.execute("ALTER TABLE reports ADD COLUMN handled INTEGER DEFAULT 0")
         except sqlite3.OperationalError: pass
+        for tbl in ('suggestions', 'reports'):   # date lisible (UTC) de chaque suggestion / signalement
+            try:
+                c.execute(f"ALTER TABLE {tbl} ADD COLUMN created_at TEXT")
+                c.execute(f"UPDATE {tbl} SET created_at=strftime('%Y-%m-%d %H:%M:%S', ts, 'unixepoch')")
+            except sqlite3.OperationalError: pass
         # corrections manuelles des totaux de likes/dislikes (ajoutées aux vrais votes)
         c.execute("CREATE TABLE IF NOT EXISTS adjust(key TEXT PRIMARY KEY, u INTEGER DEFAULT 0, d INTEGER DEFAULT 0)")
+        c.executescript("""
+        CREATE TABLE IF NOT EXISTS admins(username TEXT PRIMARY KEY, salt TEXT, hash TEXT, created INTEGER);
+        CREATE TABLE IF NOT EXISTS sessions(tok TEXT PRIMARY KEY, username TEXT, expires INTEGER);
+        """)
         c.executescript("""
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
         CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY, t TEXT, lat INTEGER DEFAULT 0, sexe TEXT, fam TEXT, tp INTEGER, ev TEXT, poly TEXT, bio TEXT, via TEXT);
@@ -132,6 +142,68 @@ def too_many(ip):
     h.append(now); HITS[ip] = h
     return len(h) > 60
 
+def hash_pw(pw, salt):
+    return hashlib.pbkdf2_hmac('sha256', pw.encode(), bytes.fromhex(salt), 300_000).hex()
+
+def set_password(c, user, pw):
+    salt = secrets.token_hex(16)
+    c.execute("INSERT INTO admins(username,salt,hash,created) VALUES(?,?,?,?) ON CONFLICT(username) DO UPDATE SET salt=excluded.salt, hash=excluded.hash", (user, salt, hash_pw(pw, salt), int(time.time())))
+    c.execute("DELETE FROM sessions WHERE username=?", (user,))
+
+LOGIN_HITS = {}
+def login_blocked(ip):
+    now = time.time(); h = [t for t in LOGIN_HITS.get(ip, []) if now - t < 300]
+    LOGIN_HITS[ip] = h
+    return len(h) >= 8
+
+SYNC_TABLES = ['meta', 'nodes', 'node_kids', 'items', 'node_images', 'glossary', 'votes', 'suggestions', 'reports', 'adjust']
+
+def export_db_bytes():
+    """copie cohérente de la base, SANS les comptes admin ni les sessions"""
+    fd, tmp = tempfile.mkstemp(suffix='.db'); os.close(fd)
+    try:
+        src = db(); dst = sqlite3.connect(tmp); src.backup(dst); src.close()
+        for t in ('admins', 'sessions'): dst.execute(f"DROP TABLE IF EXISTS {t}")
+        dst.commit(); dst.execute("VACUUM"); dst.close()
+        return open(tmp, 'rb').read()
+    finally:
+        os.remove(tmp)
+
+def import_db_bytes(data):
+    """remplace le contenu par celui d'un fichier .db exporté ; garde les comptes admin ; sauvegarde l'ancienne base avant"""
+    if not data.startswith(b'SQLite format 3\x00'): raise ValueError("Ce n'est pas un fichier SQLite.")
+    fd, tmp = tempfile.mkstemp(suffix='.db'); os.close(fd)
+    try:
+        open(tmp, 'wb').write(data)
+        chk = sqlite3.connect(tmp)
+        try:
+            if chk.execute("PRAGMA integrity_check").fetchone()[0] != 'ok': raise ValueError('Fichier SQLite endommagé.')
+            names = {r[0] for r in chk.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        finally: chk.close()
+        if not {'nodes', 'items'} <= names: raise ValueError("Ce fichier ne ressemble pas à une base de la clé (tables nodes / items absentes).")
+        backup = DB + '.avant-import-' + time.strftime('%Y%m%d-%H%M%S')
+        with LOCK:
+            src = db(); dst = sqlite3.connect(backup); src.backup(dst); dst.close(); src.close()
+            c = db(); counts = {}
+            try:
+                c.execute("ATTACH DATABASE ? AS imp", (tmp,))
+                for t in SYNC_TABLES:
+                    if t not in names: continue
+                    mine = [r[1] for r in c.execute(f"PRAGMA main.table_info({t})")]
+                    theirs = {r[1] for r in c.execute(f"PRAGMA imp.table_info({t})")}
+                    cols = [x for x in mine if x in theirs]
+                    if not cols: continue
+                    c.execute(f"DELETE FROM main.{t}")
+                    c.execute(f"INSERT INTO main.{t}({','.join(cols)}) SELECT {','.join(cols)} FROM imp.{t}")
+                    counts[t] = c.execute(f"SELECT COUNT(*) FROM main.{t}").fetchone()[0]
+                c.commit()
+            except Exception:
+                c.rollback(); raise
+            finally: c.close()
+        return counts, os.path.basename(backup)
+    finally:
+        os.remove(tmp)
+
 def counts_for(c, key=None):
     q = "SELECT key, vote, COUNT(*) n FROM votes" + (" WHERE key=?" if key else "") + " GROUP BY key, vote"
     out = {}
@@ -164,18 +236,28 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def ip(self):
         return self.headers.get('X-Forwarded-For', self.client_address[0]).split(',')[0].strip()
-    def send(self, code, obj, ctype='application/json; charset=utf-8'):
+    def send(self, code, obj, ctype='application/json; charset=utf-8', extra=None):
         body = obj if isinstance(obj, bytes) else json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
+        for k, v in (extra or {}).items(): self.send_header(k, v)
+        if self.path.startswith('/api/admin') or self.path == '/admin': self.send_header('Cache-Control', 'no-store')
         self.send_header('Access-Control-Allow-Origin', ORIGIN)
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Token')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.end_headers(); self.wfile.write(body)
-    def admin_ok(self, q, d=None):
-        tok = self.headers.get('X-Admin-Token') or (q.get('token') or [''])[0] or ((d or {}).get('token') or '')
-        return bool(ADMIN) and hmac.compare_digest(str(tok).encode(), ADMIN.encode())
+    def session_user(self):
+        m = re.search(r'(?:^|;\s*)adm=([\w\-]+)', self.headers.get('Cookie', ''))
+        if not m: return None
+        h = hashlib.sha256(m.group(1).encode()).hexdigest()
+        with db() as c:
+            r = c.execute("SELECT username FROM sessions WHERE tok=? AND expires>?", (h, int(time.time()))).fetchone()
+        return r['username'] if r else None
+
+    def admin_ok(self, q=None, d=None, write=False):
+        if write and self.headers.get('X-Requested-With') != 'admin': return False   # protection CSRF
+        return self.session_user() is not None
 
     def admin_get(self, path, q):
         with db() as c:
@@ -192,12 +274,26 @@ class H(BaseHTTPRequestHandler):
                         it.update(key=k, real_u=real['u'], real_d=real['d'], u=tot['u'], d=tot['d'])
                     items.append(it)
                 return self.send(200, {'node': dict(n) if n else {}, 'items': items})
+            if path == '/api/admin/export':
+                body = export_db_bytes()
+                return self.send(200, body, 'application/vnd.sqlite3', extra={'Content-Disposition': 'attachment; filename="cle-%s.db"' % time.strftime('%Y%m%d-%H%M')})
+            if path == '/api/admin/votes':
+                keys = {r['key'] for r in c.execute("SELECT DISTINCT key FROM votes UNION SELECT key FROM adjust")}
+                out = []
+                for k in keys:
+                    text, nid, nname, iid = resolve_key(c, k); tot = counts_for(c, k).get(k, {'u': 0, 'd': 0}); real = real_counts(c, k)
+                    out.append({'key': k, 'text': text, 'node': nid, 'node_name': nname, 'u': tot['u'], 'd': tot['d'], 'real_u': real['u'], 'real_d': real['d']})
+                out.sort(key=lambda x: -(x['u'] + x['d']))
+                return self.send(200, out)
             if path in ('/api/admin', '/api/admin/overview'):
                 sug = []
                 for r in c.execute("SELECT * FROM suggestions ORDER BY id DESC LIMIT 1000"):
                     t = dict(r); nm = c.execute("SELECT t FROM nodes WHERE id=?", (r['node'],)).fetchone()
                     t['node_name'] = nm['t'] if nm else r['node']; t['voter'] = (r['voter'] or '')[:6]
                     t['status'] = t.get('status') or ('approved' if t.get('approved') else 'pending')
+                    if t.get('item_id'):
+                        k = 'c%d' % t['item_id']; tot = counts_for(c, k).get(k, {'u': 0, 'd': 0}); real = real_counts(c, k)
+                        t.update(key=k, u=tot['u'], d=tot['d'], real_u=real['u'], real_d=real['d'])
                     sug.append(t)
                 rep = []
                 for r in c.execute("SELECT * FROM reports ORDER BY id DESC LIMIT 2000"):
@@ -213,9 +309,19 @@ class H(BaseHTTPRequestHandler):
     def admin_post(self, pth, d):
         with LOCK, db() as c:
             if pth in ('/api/admin/suggestion', '/api/admin/approve'):
+                action = d.get('action') or ('approve' if d.get('approved') else 'reset')
+                if isinstance(d.get('ids'), list):   # action groupée (supprimer / refuser / remettre en attente une sélection)
+                    n = 0
+                    for x in d['ids'][:2000]:
+                        r = c.execute("SELECT * FROM suggestions WHERE id=?", (int(x),)).fetchone()
+                        if not r or action not in ('delete', 'reject', 'reset'): continue
+                        if r['item_id']: c.execute("UPDATE items SET visible=0 WHERE id=?", (r['item_id'],))
+                        if action == 'delete': c.execute("DELETE FROM suggestions WHERE id=?", (r['id'],))
+                        else: c.execute("UPDATE suggestions SET status=?, approved=0 WHERE id=?", ('rejected' if action == 'reject' else 'pending', r['id']))
+                        n += 1
+                    return self.send(200, {'ok': True, 'n': n})
                 sid = int(d.get('id', 0)); r = c.execute("SELECT * FROM suggestions WHERE id=?", (sid,)).fetchone()
                 if not r: return self.send(404, {'error': 'introuvable'})
-                action = d.get('action') or ('approve' if d.get('approved') else 'reset')
                 if action == 'approve':
                     text = str(d.get('text') or r['text']).strip()[:600]
                     grp = d.get('grp') if d.get('grp') in ('o', 'm', 'a') else 'a'; dist = 1 if d.get('dist') else 0
@@ -231,6 +337,14 @@ class H(BaseHTTPRequestHandler):
                 elif action == 'delete':
                     if r['item_id']: c.execute("UPDATE items SET visible=0 WHERE id=?", (r['item_id'],))
                     c.execute("DELETE FROM suggestions WHERE id=?", (sid,))
+                else: return self.send(400, {'error': 'action'})
+                return self.send(200, {'ok': True})
+            if pth == '/api/admin/purge':
+                what = d.get('what')
+                if what == 'rejected': c.execute("DELETE FROM suggestions WHERE status='rejected'")
+                elif what == 'all_suggestions':
+                    c.execute("UPDATE items SET visible=0 WHERE id IN (SELECT item_id FROM suggestions WHERE item_id IS NOT NULL)"); c.execute("DELETE FROM suggestions")
+                elif what == 'handled_reports': c.execute("DELETE FROM reports WHERE handled=1")
                 else: return self.send(400, {'error': 'action'})
                 return self.send(200, {'ok': True})
             if pth == '/api/admin/report':
@@ -286,8 +400,11 @@ class H(BaseHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json; charset=utf-8'); self.send_header('Content-Length', str(len(body)))
                 self.send_header('Cache-Control', 'no-cache'); self.send_header('Access-Control-Allow-Origin', ORIGIN)
                 self.end_headers(); self.wfile.write(body); return
+        if u.path == '/api/admin/me':
+            with db() as c: setup = c.execute("SELECT 1 FROM admins LIMIT 1").fetchone() is not None
+            return self.send(200, {'user': self.session_user(), 'setup': setup})
         if u.path.startswith('/api/admin'):
-            if not self.admin_ok(q): return self.send(403, {'error': 'interdit'})
+            if not self.admin_ok(q): return self.send(401, {'error': 'connexion requise'})
             return self.admin_get(u.path, q)
         if u.path == '/api/state':
             voter = (q.get('voter') or [''])[0]
@@ -296,7 +413,7 @@ class H(BaseHTTPRequestHandler):
                 if VOTER_RE.match(voter):
                     mine = {r['key']: r['vote'] for r in c.execute("SELECT key, vote FROM votes WHERE voter=?", (voter,))}
                 return self.send(200, {'counts': counts_for(c), 'mine': mine})
-        if u.path == '/admin' and ADMIN:
+        if u.path == '/admin':
             p = os.path.join(HERE, 'admin.html')
             if os.path.exists(p): return self.send(200, open(p, 'rb').read(), 'text/html; charset=utf-8')
         if u.path in ('/', '/index.html') and STATIC:
@@ -314,6 +431,14 @@ class H(BaseHTTPRequestHandler):
         self.send(404, {'error': 'not found'})
     def do_POST(self):
         if too_many(self.ip()): return self.send(429, {'error': 'trop de requêtes'})
+        if urlparse(self.path).path == '/api/admin/import':
+            if not self.admin_ok(write=True): return self.send(403, {'error': 'interdit'})
+            n = int(self.headers.get('Content-Length', '0'))
+            if n > 200_000_000: return self.send(413, {'error': 'fichier trop gros'})
+            try: counts, backup = import_db_bytes(self.rfile.read(n))
+            except ValueError as e: return self.send(400, {'error': str(e)})
+            except Exception as e: return self.send(500, {'error': 'Import impossible : ' + str(e)})
+            return self.send(200, {'ok': True, 'counts': counts, 'backup': backup})
         try:
             n = int(self.headers.get('Content-Length', '0'))
             if n > 20000: return self.send(413, {'error': 'trop gros'})
@@ -321,8 +446,29 @@ class H(BaseHTTPRequestHandler):
         except Exception:
             return self.send(400, {'error': 'json invalide'})
         pth = urlparse(self.path).path
+        if pth == '/api/admin/login':
+            ip = self.ip()
+            if login_blocked(ip): return self.send(429, {'error': 'Trop de tentatives, réessaie dans quelques minutes.'})
+            user = str(d.get('username', '')).strip()[:60]; pw = str(d.get('password', ''))[:200]
+            with db() as c: r = c.execute("SELECT * FROM admins WHERE username=?", (user,)).fetchone()
+            ok = bool(r) and hmac.compare_digest(hash_pw(pw, r['salt']), r['hash'])
+            if not r: hash_pw(pw, '00' * 16)   # même durée si l'utilisateur n'existe pas
+            if not ok:
+                LOGIN_HITS.setdefault(ip, []).append(time.time()); time.sleep(0.6)
+                return self.send(401, {'error': 'Identifiant ou mot de passe incorrect.'})
+            tok = secrets.token_urlsafe(32); exp = int(time.time()) + SESSION_HOURS * 3600
+            with LOCK, db() as c:
+                c.execute("DELETE FROM sessions WHERE expires<?", (int(time.time()),))
+                c.execute("INSERT INTO sessions VALUES(?,?,?)", (hashlib.sha256(tok.encode()).hexdigest(), user, exp))
+            secure = '; Secure' if self.headers.get('X-Forwarded-Proto') == 'https' else ''
+            return self.send(200, {'user': user}, extra={'Set-Cookie': f'adm={tok}; HttpOnly; SameSite=Strict; Path=/; Max-Age={SESSION_HOURS * 3600}{secure}'})
+        if pth == '/api/admin/logout':
+            m = re.search(r'(?:^|;\s*)adm=([\w\-]+)', self.headers.get('Cookie', ''))
+            if m:
+                with LOCK, db() as c: c.execute("DELETE FROM sessions WHERE tok=?", (hashlib.sha256(m.group(1).encode()).hexdigest(),))
+            return self.send(200, {'ok': True}, extra={'Set-Cookie': 'adm=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'})
         if pth.startswith('/api/admin'):
-            if not self.admin_ok({}, d): return self.send(403, {'error': 'interdit'})
+            if not self.admin_ok(write=True): return self.send(403, {'error': 'interdit'})
             return self.admin_post(pth, d)
         voter = str(d.get('voter', ''))
         if not VOTER_RE.match(voter): return self.send(400, {'error': 'voter invalide'})
@@ -337,14 +483,33 @@ class H(BaseHTTPRequestHandler):
             if p == '/api/suggest':
                 text = str(d.get('text', '')).strip()[:400]
                 if not text: return self.send(400, {'error': 'vide'})
-                c.execute("INSERT INTO suggestions(voter,node,text,ts) VALUES(?,?,?,?)", (voter, str(d.get('id', ''))[:100], text, now))
+                c.execute("INSERT INTO suggestions(voter,node,text,ts,created_at) VALUES(?,?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch'))", (voter, str(d.get('id', ''))[:100], text, now, now))
                 return self.send(200, {'ok': True})
             if p == '/api/report':
-                c.execute("INSERT INTO reports(voter,key,reason,comment,ts) VALUES(?,?,?,?,?)", (voter, str(d.get('key', ''))[:300], str(d.get('reason', ''))[:50], str(d.get('comment', ''))[:400], now))
+                c.execute("INSERT INTO reports(voter,key,reason,comment,ts,created_at) VALUES(?,?,?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch'))", (voter, str(d.get('key', ''))[:300], str(d.get('reason', ''))[:50], str(d.get('comment', ''))[:400], now, now))
                 return self.send(200, {'ok': True})
         self.send(404, {'error': 'not found'})
 
-if __name__ == '__main__':
+def cli(args):
     init()
+    with db() as c:
+        if args[0] == 'users':
+            for r in c.execute("SELECT username, created FROM admins"): print(r['username'], time.strftime('%Y-%m-%d', time.localtime(r['created'])))
+            return
+        if len(args) < 2: sys.exit('usage : python3 server.py adduser|passwd|deluser NOM')
+        user = args[1].strip()
+        if args[0] == 'deluser':
+            c.execute("DELETE FROM admins WHERE username=?", (user,)); c.execute("DELETE FROM sessions WHERE username=?", (user,)); print('supprimé :', user); return
+        pw = getpass.getpass('Mot de passe (10 caractères minimum) : ')
+        if len(pw) < 10: sys.exit('Trop court.')
+        if pw != getpass.getpass('Confirmer : '): sys.exit('Les deux mots de passe diffèrent.')
+        set_password(c, user, pw); print('OK :', user)
+
+if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] in ('adduser', 'passwd', 'deluser', 'users'):
+        cli(sys.argv[1:]); sys.exit(0)
+    init()
+    with db() as c:
+        if not c.execute("SELECT 1 FROM admins LIMIT 1").fetchone(): print("Aucun compte admin : python3 server.py adduser TON_NOM")
     print(f'Serveur sur http://{HOST}:{PORT}  (base : {DB})')
     ThreadingHTTPServer((HOST, PORT), H).serve_forever()

@@ -10,27 +10,29 @@ Fichiers : `server.py` (serveur, Python 3, aucune dépendance), `content.json` (
 Le **port par défaut est 8765** (change-le avec `PORT=...`). Il écoute en local (`HOST=127.0.0.1`) : ton serveur web doit rediriger vers lui.
 
 ## Brancher ton serveur web (exemple nginx)
-    location /api/ { proxy_pass http://127.0.0.1:8765; proxy_set_header X-Forwarded-For $remote_addr; }
-    location /     { proxy_pass http://127.0.0.1:8765; }   # ou sers index.html toi-même
+    location / { proxy_pass http://127.0.0.1:8765; proxy_set_header X-Forwarded-For $remote_addr; proxy_set_header X-Forwarded-Proto $scheme; client_max_body_size 100m; }   # ou sers index.html toi-même
 
 Si la page est sur un autre domaine que l'API : lance avec `ALLOWED_ORIGIN=https://ton-site.fr` et, dans `index.html`, remplace `const API='';` par `const API='https://domaine-de-l-api';`.
 
 ## Variables
-`PORT` (8765) · `HOST` (127.0.0.1) · `DB` (cle.db) · `ALLOWED_ORIGIN` (*) · `ADMIN_TOKEN` (vide) · `STATIC` (index.html)
+`PORT` (8765) · `HOST` (127.0.0.1) · `DB` (cle.db) · `ALLOWED_ORIGIN` (*) · `STATIC` (index.html)
 
-## Modifier les critères et valider les suggestions
-Chaque suggestion est enregistrée avec `approved = 0` : **invisible** tant que tu ne l'as pas approuvée. Lance le serveur avec `ADMIN_TOKEN=un-secret`, ouvre `https://ton-domaine/admin?token=un-secret` onglet **Suggestions** : « Approuver » crée le critère (table `items`) et il apparaît aussitôt; onglet **Critères** : choisir une étape, modifier le texte, le groupe (œil nu / microscope / autre), « distinctif », « visible », ajouter un critère. Pour une suggestion approuvée : le critère apparaît aussitôt dans l'étape concernée pour tous les visiteurs (avec un ✚), avec ses propres boutons de vote. « Retirer » le fait disparaître.
-En SQL : `sqlite3 cle.db "update suggestions set approved=1 where id=3"`.
-
-## Lire les suggestions et signalements
-Définir `ADMIN_TOKEN=un-secret`, puis ouvrir `/api/admin?token=un-secret` (JSON). Ou directement : `sqlite3 cle.db "select * from suggestions"`.
-
-## Règles actuelles (dans index.html)
-Drapeau « distinctif » à 3 likes (les anciens drapeaux démarrent à 3) · critère masqué dès 1 dislike · critère du poly sorti dès 1 like.
-Un visiteur = un identifiant anonyme stocké dans son navigateur (1 vote par critère et par navigateur).
+## Compte administrateur (login + mot de passe)
+    python3 server.py adduser ido      # crée le compte (mot de passe demandé, jamais affiché)
+    python3 server.py passwd ido       # change le mot de passe
+    python3 server.py users            # liste · deluser NOM pour supprimer
+Puis ouvrir `https://ton-domaine/admin` et se connecter. La session est un cookie (HttpOnly, Secure si le proxy envoie `X-Forwarded-Proto https`).
 
 ## Interface d'administration (`/admin`)
-Lancer le serveur avec `ADMIN_TOKEN=un-mot-de-passe-long`, puis ouvrir `https://ton-domaine/admin` (le mot de passe est demandé ; `?token=...` marche aussi une fois, il est ensuite retiré de l'adresse).
-- **Suggestions** : filtres En attente / Approuvées / Refusées. Pour chacune, tu peux corriger le texte, choisir le groupe (œil nu / microscope / autre) et « distinctif », puis Approuver (le critère devient visible pour tous), Refuser, Retirer, Remettre en attente ou Supprimer.
-- **Signalements** : regroupés par critère, avec les motifs comptés, les commentaires, les likes/dislikes du critère. Boutons : Marquer traité, Masquer / Réafficher le critère, Modifier (ouvre l'étape), Supprimer.
-- **Critères & votes** : choisir une étape ; modifier/ajouter/masquer ses critères, notes, compléments et confusions ; fixer le nombre de 👍 et 👎 affichés d'un critère (les vrais votes restent dans la base, l'écart est enregistré dans la table `adjust`) ou remettre ses votes à zéro.
+- **Suggestions** : date/heure de chaque proposition ; filtres En attente / Approuvées / Refusées ; corriger le texte, choisir le groupe et « distinctif », Approuver, Refuser, Retirer, Remettre en attente, Supprimer (un par un, par sélection, ou « tout purger »).
+- **Signalements** : regroupés par critère (motifs, commentaires, likes/dislikes) ; marquer traité, masquer/réafficher le critère, supprimer.
+- **Votes** : fixer le nombre de 👍/👎 affichés d'un critère (les vrais votes restent dans la base, l'écart va dans `adjust`) ou remettre à zéro.
+- **Critères** : modifier/ajouter/masquer les critères d'une étape.
+- **Base de données** : **Exporter** télécharge `cle-AAAAMMJJ-HHMM.db` (tout le contenu, sans les comptes admin) ; **Importer** remplace le contenu par celui d'un fichier `.db` exporté (case + confirmation). L'ancienne base est d'abord copiée à côté : `cle.db.avant-import-AAAAMMJJ-HHMMSS`. Les comptes admin sont conservés. Pour lire le contenu en SQL : `sqlite3 cle-….db .dump`.
+
+## Sauvegarde
+Fais un export de temps en temps (ou `cp cle.db sauvegarde.db` serveur arrêté).
+
+## Règles actuelles (dans index.html)
+Drapeau « distinctif » à 3 likes · critère masqué quand likes − dislikes ≤ −1 · critère du poly sorti dès 1 like net.
+Un visiteur = un identifiant anonyme stocké dans son navigateur (1 vote par critère, like et dislike exclusifs).
