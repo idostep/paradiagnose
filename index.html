@@ -319,7 +319,7 @@ footer{color:var(--ink2);font-size:13px;margin-top:28px}
     <div id="cards"></div>
   </section>
   <section class="view" id="v-rap"><div id="rappels"></div></section>
-  <footer>Critères ★ : fiches d'identification officielles (Ch. Faivre, EnvA 2026/2027). Structure : arbre (« TP tiques »), complété par les fiches. Figures : diaporamas des TP (Unité de Parasitologie-Mycologie, EnvA). Compléments en gris : à vérifier avec le cours.</footer>
+  <footer>Critères ★ : thèse, vérifiés par les enseignants (Ch. Faivre, EnvA 2026/2027). Structure : arbre (« TP tiques »), complété par les fiches. Figures : diaporamas des TP (Unité de Parasitologie-Mycologie, EnvA). Compléments en gris : à vérifier avec le cours.</footer>
 </main>
 
 <div class="gs" id="gs"><div class="gs-in" role="dialog" aria-modal="true" aria-labelledby="gs-t">
@@ -349,7 +349,7 @@ const famOf = id => N[id].fam || 'none';
 function name(id){ const n=N[id]; return n.lat ? `<i>${esc(n.t)}</i>` : esc(n.t); }
 function plain(id){ const n=N[id]; return n.t + (n.sexe ? ' ('+n.sexe.toLowerCase()+')' : ''); }
 function noteHTML(x){
-  const m=/^(Attention|Liste|À trancher|À retenir \((?:arbre 2|fiche officielle)\))\s*:\s*/.exec(x);
+  const m=/^(Attention|Liste|À trancher|À retenir(?: \((?:arbre 2|fiche officielle|thèse)\))?)\s*:\s*/.exec(x);
   const k = m ? m[1] : '';
   const lab = !m ? 'À retenir' : k==='Liste' ? 'Évaluation' : k;
   const cls = k==='Liste' ? ' lnote' : k==='À trancher' ? ' xnote' : k.startsWith('À retenir') ? ' wnote' : '';
@@ -359,7 +359,7 @@ const isP = x => x.startsWith(PO);
 const isW = x => false;
 const isF = x => x.startsWith(FO);
 const clean = x => (isW(x)||isF(x)||isP(x)) ? x.slice(2) : x;
-function mark(x){ return isP(x) ? '<span class="pd" aria-label="poly">▪</span> ' : isF(x) ? '<span class="fd" aria-label="fiche officielle">★</span> ' : isW(x) ? '<span class="wd" aria-label="arbre 2">◆</span> ' : ''; }
+function mark(x){ return isP(x) ? '<span class="pd" aria-label="poly">▪</span> ' : isF(x) ? '<span class="fd" aria-label="thèse">★</span> ' : isW(x) ? '<span class="wd" aria-label="arbre 2">◆</span> ' : ''; }
 const PAR = {}; for(const k in N) for(const c of (N[k].kids||[])) PAR[c]=k;
 const GRP = [['o','À l’œil nu ou à la loupe'],['m','Au microscope'],['a','Autres critères']];
 const critCode = (id,x) => (((CRIT[id]||{})[x]||'a')); 
@@ -413,7 +413,7 @@ function evAncestor(steps){ return steps.slice(0,-1).reverse().find(x=>N[x].ev);
 function blocks(id, withNotes=true){
   const n=N[id]; let h='';
   if(withNotes && n.note) h += n.note.map(x=>`${noteHTML(x)}`).join('');
-  if(n.tab && n.tab.length) h += `<div class="blk tabl"><div class="lbl">Critères${n.tab.some(isF)?' <span class="fleg">★ fiche officielle</span>':''}${n.tab.some(x=>!isF(x)&&!isW(x)&&!isP(x))?' <span class="aleg">• arbre</span>':''}${n.tab.some(isP)?' <span class="pleg">▪ poly</span>':''}${n.tab.some(x=>!isP(x)&&critDist(id,x))?` <span class="dleg" title="${esc(distTitle(id))}">⚑ distinctif</span>`:''}</div>${tabGroups(id,n.tab)}${SUG(id)}</div>`;
+  if(n.tab && n.tab.length) h += `<div class="blk tabl"><div class="lbl">Critères${n.tab.some(isF)?' <span class="fleg">★ thèse</span>':''}${n.tab.some(x=>!isF(x)&&!isW(x)&&!isP(x))?' <span class="aleg">• arbre</span>':''}${n.tab.some(isP)?' <span class="pleg">▪ poly</span>':''}${n.tab.some(x=>!isP(x)&&critDist(id,x))?` <span class="dleg" title="${esc(distTitle(id))}">⚑ distinctif</span>`:''}</div>${tabGroups(id,n.tab)}${SUG(id)}</div>`;
   else if(id!==ROOT) h += `<p class="empty">Pas de critère écrit à cette étape.</p>`;
   const mo0=(n.moi||[]).filter(x=>!isP(x)), mo1=(n.moi||[]).filter(isP);
   if(mo0.length) h += `<div class="blk moi"><div class="lbl">Compléments</div><ul>${mo0.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
