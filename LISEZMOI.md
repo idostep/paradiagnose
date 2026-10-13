@@ -34,5 +34,5 @@ Puis ouvrir `https://ton-domaine/admin` et se connecter. La session est un cooki
 Fais un export de temps en temps (ou `cp cle.db sauvegarde.db` serveur arrêté).
 
 ## Règles actuelles (dans index.html)
-Drapeau « distinctif » à 3 likes · critère masqué quand likes − dislikes ≤ −1 · critère du poly sorti dès 1 like net.
+Drapeau « distinctif » à 3 likes · critère masqué quand likes − dislikes ≤ −3 · critère du poly sorti dès 1 like net.
 Un visiteur = un identifiant anonyme stocké dans son navigateur (1 vote par critère, like et dislike exclusifs).

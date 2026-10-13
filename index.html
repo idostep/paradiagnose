@@ -661,7 +661,7 @@ renderStep();
 const VKEY='cle-votes';let VOTES={};try{VOTES=JSON.parse(localStorage.getItem(VKEY)||'{}')}catch(_){}
 /* ── Mode en ligne : API=null → votes locaux seulement ; API='' (même domaine) ou 'https://mon-serveur' → votes partagés ── */
 const API='';
-let COUNTS={},EXTRA={};const DTHR=1;
+let COUNTS={},EXTRA={};const DTHR=3;
 let VID='';try{VID=localStorage.getItem('cle-vid')||''}catch(_){}
 if(!VID){VID=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():(String(Math.random()).slice(2)+Date.now());try{localStorage.setItem('cle-vid',VID)}catch(_){}}
 function cnt(k,t){if(API!==null){const c=COUNTS[k];const n=c?(c[t]|0):0;return Math.max(n,VOTES[k]===t?1:0)}return VOTES[k]===t?1:0}
