@@ -28,3 +28,9 @@ Définir `ADMIN_TOKEN=un-secret`, puis ouvrir `/api/admin?token=un-secret` (JSON
 ## Règles actuelles (dans index.html)
 Drapeau « distinctif » à 3 likes (les anciens drapeaux démarrent à 3) · critère masqué dès 1 dislike · critère du poly sorti dès 1 like.
 Un visiteur = un identifiant anonyme stocké dans son navigateur (1 vote par critère et par navigateur).
+
+## Interface d'administration (`/admin`)
+Lancer le serveur avec `ADMIN_TOKEN=un-mot-de-passe-long`, puis ouvrir `https://ton-domaine/admin` (le mot de passe est demandé ; `?token=...` marche aussi une fois, il est ensuite retiré de l'adresse).
+- **Suggestions** : filtres En attente / Approuvées / Refusées. Pour chacune, tu peux corriger le texte, choisir le groupe (œil nu / microscope / autre) et « distinctif », puis Approuver (le critère devient visible pour tous), Refuser, Retirer, Remettre en attente ou Supprimer.
+- **Signalements** : regroupés par critère, avec les motifs comptés, les commentaires, les likes/dislikes du critère. Boutons : Marquer traité, Masquer / Réafficher le critère, Modifier (ouvre l'étape), Supprimer.
+- **Critères & votes** : choisir une étape ; modifier/ajouter/masquer ses critères, notes, compléments et confusions ; fixer le nombre de 👍 et 👎 affichés d'un critère (les vrais votes restent dans la base, l'écart est enregistré dans la table `adjust`) ou remettre ses votes à zéro.

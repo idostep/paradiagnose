@@ -7,7 +7,7 @@ Variables d'environnement (toutes facultatives) :
   HOST=127.0.0.1          adresse d'écoute (127.0.0.1 = derrière ton serveur web / reverse proxy)
   DB=cle.db               fichier SQLite
   ALLOWED_ORIGIN=*        origine autorisée (CORS) si la page est sur un autre domaine, ex. https://monsite.fr
-  ADMIN_TOKEN=            si défini, GET /api/admin?token=... liste suggestions et signalements
+  ADMIN_TOKEN=            mot de passe de l'interface /admin (désactivée si vide)
   STATIC=index.html       page servie sur / (mettre vide pour désactiver)
   Les images sont servies depuis le dossier assets/ (à côté de server.py) sur /assets/...
 
@@ -22,11 +22,12 @@ API :
   POST /api/vote     {voter,key,vote}   vote = "u" | "d" | null (retirer)
   POST /api/suggest  {voter,id,text}    (créée avec approved=0 : invisible tant que tu ne l'approuves pas)
   POST /api/report   {voter,key,reason,comment}
-  GET  /admin                           page d'administration (ADMIN_TOKEN requis) : approuver / retirer les suggestions
-  POST /api/admin/approve {token,id,approved}   approuver = créer le critère (visible pour tous)
-  GET  /api/admin/nodes | /api/admin/items?node=ID ; POST /api/admin/item | /api/admin/node  (édition des critères)
+  GET  /admin                           interface d'administration (admin.html ; ADMIN_TOKEN requis)
+  API admin (en-tête X-Admin-Token) : GET overview | nodes | items?node=ID ;
+    POST suggestion {id,action: approve|reject|reset|delete,text,grp,dist} · report {id|key,action} ·
+    votes {key,u,d | reset} · item · node
 """
-import json, os, re, sqlite3, threading, time
+import hmac, json, os, re, sqlite3, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -59,6 +60,14 @@ def init():
         except sqlite3.OperationalError: pass
         try: c.execute("ALTER TABLE suggestions ADD COLUMN item_id INTEGER")
         except sqlite3.OperationalError: pass
+        try:
+            c.execute("ALTER TABLE suggestions ADD COLUMN status TEXT DEFAULT 'pending'")
+            c.execute("UPDATE suggestions SET status='approved' WHERE approved=1")
+        except sqlite3.OperationalError: pass
+        try: c.execute("ALTER TABLE reports ADD COLUMN handled INTEGER DEFAULT 0")
+        except sqlite3.OperationalError: pass
+        # corrections manuelles des totaux de likes/dislikes (ajoutées aux vrais votes)
+        c.execute("CREATE TABLE IF NOT EXISTS adjust(key TEXT PRIMARY KEY, u INTEGER DEFAULT 0, d INTEGER DEFAULT 0)")
         c.executescript("""
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
         CREATE TABLE IF NOT EXISTS nodes(id TEXT PRIMARY KEY, t TEXT, lat INTEGER DEFAULT 0, sexe TEXT, fam TEXT, tp INTEGER, ev TEXT, poly TEXT, bio TEXT, via TEXT);
@@ -128,38 +137,27 @@ def counts_for(c, key=None):
     out = {}
     for r in c.execute(q, (key,) if key else ()):
         out.setdefault(r['key'], {'u': 0, 'd': 0})[r['vote']] = r['n']
+    for r in c.execute("SELECT * FROM adjust" + (" WHERE key=?" if key else ""), (key,) if key else ()):
+        o = out.setdefault(r['key'], {'u': 0, 'd': 0})
+        o['u'] = max(0, o['u'] + r['u']); o['d'] = max(0, o['d'] + r['d'])
     return out
 
-ADMIN_HTML = '''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Administration</title>
-<style>body{font:15px system-ui;max-width:860px;margin:20px auto;padding:0 12px}h2{margin:18px 0 6px}.s{border:1px solid #ccc;border-radius:8px;padding:8px 10px;margin:8px 0}.s.ok{background:#e6f6ec}.m{color:#666;font-size:12px}button{margin-right:6px;padding:4px 10px}
-nav button{font-weight:700}input[type=text],select{font:inherit;padding:3px 6px}.r{display:flex;gap:6px;align-items:center;margin:4px 0;flex-wrap:wrap}.r input[type=text]{flex:1;min-width:240px}.h{opacity:.5}</style>
-<h2>Administration</h2><nav><button onclick="show('sg')">Suggestions</button><button onclick="show('ed')">Critères</button><button onclick="show('rp')">Signalements</button></nav>
-<div id=sg></div><div id=ed hidden><div class=r><select id=nsel></select><button onclick="loadItems()">Ouvrir</button></div><div id=nbody></div></div><div id=rp hidden></div>
-<script>
-const T=new URLSearchParams(location.search).get('token')||prompt('Token admin');
-const q=p=>fetch(p+(p.includes('?')?'&':'?')+'token='+encodeURIComponent(T)).then(r=>r.json());
-const post=(p,d)=>fetch(p,{method:'POST',body:JSON.stringify(Object.assign({token:T},d))}).then(r=>r.json());
-function show(k){['sg','ed','rp'].forEach(x=>document.getElementById(x).hidden=x!==k)}
-const el=(t,a={},...k)=>{const e=document.createElement(t);Object.assign(e,a);k.forEach(x=>e.append(x));return e};
-async function loadSug(){const d=await q('/api/admin');sg.innerHTML='<h3>Suggestions des visiteurs</h3>';
-d.suggestions.forEach(x=>{const e=el('div',{className:'s'+(x.approved?' ok':'')});e.append(el('div',{className:'m',textContent:'#'+x.id+' · étape : '+x.node+' · '+new Date(x.ts*1000).toLocaleString()+' · '+(x.approved?'VISIBLE':'en attente')}),el('div',{textContent:x.text}),
-el('button',{textContent:x.approved?'Retirer':'Approuver',onclick:async()=>{await post('/api/admin/approve',{id:x.id,approved:!x.approved});loadSug()}}));sg.append(e)});
-if(!d.suggestions.length)sg.append('Aucune suggestion.');
-rp.innerHTML='<h3>Signalements</h3>';d.reports.forEach(x=>rp.append(el('div',{className:'s'},el('div',{className:'m',textContent:'#'+x.id+' · '+x.reason+' · '+new Date(x.ts*1000).toLocaleString()}),el('div',{textContent:x.text||x.key}),el('div',{className:'m',textContent:x.comment||''}))));
-if(!d.reports.length)rp.append('Aucun signalement.')}
-async function loadNodes(){const n=await q('/api/admin/nodes');n.forEach(x=>nsel.append(el('option',{value:x.id,textContent:x.t+' ('+x.id+')'})))}
-const KINDS={tab:'Critères',moi:'Compléments',note:'Notes',conf:'Confusions'};
-async function loadItems(){const d=await q('/api/admin/items?node='+encodeURIComponent(nsel.value));nbody.innerHTML='';
-const id=nsel.value;const nr=el('div',{className:'r'});const ti=el('input',{type:'text',value:d.node.t||''});const bi=el('input',{type:'text',value:d.node.bio||'',placeholder:'hôte / importance'});
-nr.append('Nom :',ti,bi,el('button',{textContent:'Enregistrer',onclick:async()=>{await post('/api/admin/node',{id,t:ti.value,bio:bi.value});alert('ok')}}));nbody.append(nr);
-Object.keys(KINDS).forEach(k=>{nbody.append(el('h3',{textContent:KINDS[k]}));d.items.filter(i=>i.kind===k).forEach(i=>nbody.append(row(i,k,id)));nbody.append(row({text:'',grp:'a',dist:0,visible:1},k,id,true))})}
-function row(i,k,node,isNew){const r=el('div',{className:'r'+(i.visible?'':' h')});const t=el('input',{type:'text',value:i.text,placeholder:isNew?'Nouveau…':''});
-const g=el('select');[['o','œil nu'],['m','microscope'],['a','autre']].forEach(([v,l])=>g.append(el('option',{value:v,textContent:l,selected:i.grp===v})));
-const d=el('input',{type:'checkbox',checked:!!i.dist}),v=el('input',{type:'checkbox',checked:!!i.visible});
-r.append(t);if(k==='tab')r.append(g,el('label',{},d,' distinctif'));r.append(el('label',{},v,' visible'),el('button',{textContent:isNew?'Ajouter':'Enregistrer',onclick:async()=>{if(!t.value.trim())return;
-await post('/api/admin/item',{id:i.id,node,kind:k,text:t.value,grp:g.value,dist:d.checked,visible:v.checked});loadItems()}}));return r}
-loadSug();loadNodes();
-</script>'''
+def real_counts(c, key):
+    o = {'u': 0, 'd': 0}
+    for r in c.execute("SELECT vote, COUNT(*) n FROM votes WHERE key=? GROUP BY vote", (key,)): o[r['vote']] = r['n']
+    return o
+
+def resolve_key(c, key):
+    """clé de vote -> (texte du critère, id étape, nom étape, id critère)"""
+    key = str(key or '')
+    if key.startswith('c') and key[1:].isdigit():
+        r = c.execute("SELECT i.id, i.text, i.node_id, n.t FROM items i LEFT JOIN nodes n ON n.id=i.node_id WHERE i.id=?", (int(key[1:]),)).fetchone()
+        if r: return r['text'], r['node_id'], r['t'], r['id']
+    if '|' in key:
+        nid, text = key.split('|', 1)
+        r = c.execute("SELECT t FROM nodes WHERE id=?", (nid,)).fetchone()
+        return text, nid, (r['t'] if r else nid), None
+    return key, None, None, None
 
 class H(BaseHTTPRequestHandler):
     server_version = 'cle/1.0'
@@ -172,9 +170,112 @@ class H(BaseHTTPRequestHandler):
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(body)))
         self.send_header('Access-Control-Allow-Origin', ORIGIN)
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Token')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.end_headers(); self.wfile.write(body)
+    def admin_ok(self, q, d=None):
+        tok = self.headers.get('X-Admin-Token') or (q.get('token') or [''])[0] or ((d or {}).get('token') or '')
+        return bool(ADMIN) and hmac.compare_digest(str(tok).encode(), ADMIN.encode())
+
+    def admin_get(self, path, q):
+        with db() as c:
+            if path == '/api/admin/nodes':
+                return self.send(200, [dict(r) for r in c.execute("SELECT id, t, fam FROM nodes ORDER BY t")])
+            if path == '/api/admin/items':
+                node = (q.get('node') or [''])[0]
+                n = c.execute("SELECT * FROM nodes WHERE id=?", (node,)).fetchone()
+                items = []
+                for r in c.execute("SELECT * FROM items WHERE node_id=? ORDER BY kind, pos, id", (node,)):
+                    it = dict(r)
+                    if r['kind'] == 'tab':
+                        k = 'c%d' % r['id']; real = real_counts(c, k); tot = counts_for(c, k).get(k, {'u': 0, 'd': 0})
+                        it.update(key=k, real_u=real['u'], real_d=real['d'], u=tot['u'], d=tot['d'])
+                    items.append(it)
+                return self.send(200, {'node': dict(n) if n else {}, 'items': items})
+            if path in ('/api/admin', '/api/admin/overview'):
+                sug = []
+                for r in c.execute("SELECT * FROM suggestions ORDER BY id DESC LIMIT 1000"):
+                    t = dict(r); nm = c.execute("SELECT t FROM nodes WHERE id=?", (r['node'],)).fetchone()
+                    t['node_name'] = nm['t'] if nm else r['node']; t['voter'] = (r['voter'] or '')[:6]
+                    t['status'] = t.get('status') or ('approved' if t.get('approved') else 'pending')
+                    sug.append(t)
+                rep = []
+                for r in c.execute("SELECT * FROM reports ORDER BY id DESC LIMIT 2000"):
+                    t = dict(r); text, nid, nname, iid = resolve_key(c, r['key'])
+                    t.update(text=text, node=nid, node_name=nname, item_id=iid, voter=(r['voter'] or '')[:6])
+                    if iid:
+                        it = c.execute("SELECT visible FROM items WHERE id=?", (iid,)).fetchone(); t['visible'] = it['visible'] if it else None
+                        k = 'c%d' % iid; tot = counts_for(c, k).get(k, {'u': 0, 'd': 0}); t['u'], t['d'] = tot['u'], tot['d']
+                    rep.append(t)
+                return self.send(200, {'suggestions': sug, 'reports': rep})
+        self.send(404, {'error': 'not found'})
+
+    def admin_post(self, pth, d):
+        with LOCK, db() as c:
+            if pth in ('/api/admin/suggestion', '/api/admin/approve'):
+                sid = int(d.get('id', 0)); r = c.execute("SELECT * FROM suggestions WHERE id=?", (sid,)).fetchone()
+                if not r: return self.send(404, {'error': 'introuvable'})
+                action = d.get('action') or ('approve' if d.get('approved') else 'reset')
+                if action == 'approve':
+                    text = str(d.get('text') or r['text']).strip()[:600]
+                    grp = d.get('grp') if d.get('grp') in ('o', 'm', 'a') else 'a'; dist = 1 if d.get('dist') else 0
+                    if r['item_id']: c.execute("UPDATE items SET visible=1, text=?, grp=?, dist=? WHERE id=?", (text, grp, dist, r['item_id']))
+                    else:
+                        pos = c.execute("SELECT COALESCE(MAX(pos),0)+1 FROM items WHERE node_id=? AND kind='tab'", (r['node'],)).fetchone()[0]
+                        cur = c.execute("INSERT INTO items(node_id,kind,pos,text,grp,dist,visible,source) VALUES(?,?,?,?,?,?,1,'visiteur')", (r['node'], 'tab', pos, text, grp, dist))
+                        c.execute("UPDATE suggestions SET item_id=? WHERE id=?", (cur.lastrowid, sid))
+                    c.execute("UPDATE suggestions SET status='approved', approved=1 WHERE id=?", (sid,))
+                elif action in ('reject', 'reset'):
+                    if r['item_id']: c.execute("UPDATE items SET visible=0 WHERE id=?", (r['item_id'],))
+                    c.execute("UPDATE suggestions SET status=?, approved=0 WHERE id=?", ('rejected' if action == 'reject' else 'pending', sid))
+                elif action == 'delete':
+                    if r['item_id']: c.execute("UPDATE items SET visible=0 WHERE id=?", (r['item_id'],))
+                    c.execute("DELETE FROM suggestions WHERE id=?", (sid,))
+                else: return self.send(400, {'error': 'action'})
+                return self.send(200, {'ok': True})
+            if pth == '/api/admin/report':
+                rid = int(d.get('id', 0)); action = d.get('action')
+                keys = [d['key']] if d.get('key') else []
+                if action in ('handled', 'unhandled'):
+                    flag = 1 if action == 'handled' else 0
+                    if keys: c.execute("UPDATE reports SET handled=? WHERE key=?", (flag, keys[0]))
+                    else: c.execute("UPDATE reports SET handled=? WHERE id=?", (flag, rid))
+                elif action == 'delete':
+                    if keys: c.execute("DELETE FROM reports WHERE key=?", (keys[0],))
+                    else: c.execute("DELETE FROM reports WHERE id=?", (rid,))
+                elif action in ('hide_item', 'show_item'):
+                    iid = int(d.get('item_id', 0)); c.execute("UPDATE items SET visible=? WHERE id=?", (1 if action == 'show_item' else 0, iid))
+                else: return self.send(400, {'error': 'action'})
+                return self.send(200, {'ok': True})
+            if pth == '/api/admin/votes':
+                key = str(d.get('key', ''))[:300]
+                if not key: return self.send(400, {'error': 'clé'})
+                if d.get('reset'):
+                    c.execute("DELETE FROM votes WHERE key=?", (key,)); c.execute("DELETE FROM adjust WHERE key=?", (key,))
+                else:
+                    real = real_counts(c, key); u = max(0, int(d.get('u', 0))); dd = max(0, int(d.get('d', 0)))
+                    c.execute("INSERT INTO adjust(key,u,d) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET u=excluded.u, d=excluded.d", (key, u - real['u'], dd - real['d']))
+                return self.send(200, {'counts': counts_for(c, key).get(key, {'u': 0, 'd': 0})})
+            if pth == '/api/admin/item':
+                text = str(d.get('text', '')).strip()[:600]; kind = d.get('kind', 'tab')
+                if kind not in ('tab', 'moi', 'note', 'conf') or not text: return self.send(400, {'error': 'paramètres'})
+                grp = d.get('grp') if d.get('grp') in ('o', 'm', 'a') else 'a'
+                vals = (text, kind, grp, 1 if d.get('dist') else 0, 0 if d.get('visible') is False or d.get('visible') == 0 else 1)
+                if d.get('id'):
+                    c.execute("UPDATE items SET text=?, kind=?, grp=?, dist=?, visible=? WHERE id=?", vals + (int(d['id']),))
+                    return self.send(200, {'id': int(d['id'])})
+                node = str(d.get('node', ''))
+                if not c.execute("SELECT 1 FROM nodes WHERE id=?", (node,)).fetchone(): return self.send(404, {'error': 'étape inconnue'})
+                pos = c.execute("SELECT COALESCE(MAX(pos),0)+1 FROM items WHERE node_id=? AND kind=?", (node, kind)).fetchone()[0]
+                cur = c.execute("INSERT INTO items(text,kind,grp,dist,visible,node_id,pos,source) VALUES(?,?,?,?,?,?,?,'admin')", vals + (node, pos))
+                return self.send(200, {'id': cur.lastrowid})
+            if pth == '/api/admin/node':
+                nid = str(d.get('id', ''))
+                for f in ('t', 'bio', 'fam', 'ev', 'sexe', 'via'):
+                    if f in d: c.execute(f"UPDATE nodes SET {f}=? WHERE id=?", (str(d[f]) if d[f] not in (None, '') else None, nid))
+                return self.send(200, {'ok': True})
+        self.send(404, {'error': 'not found'})
+
     def do_OPTIONS(self): self.send(204, b'')
     def do_GET(self):
         u = urlparse(self.path); q = parse_qs(u.query)
@@ -185,14 +286,9 @@ class H(BaseHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json; charset=utf-8'); self.send_header('Content-Length', str(len(body)))
                 self.send_header('Cache-Control', 'no-cache'); self.send_header('Access-Control-Allow-Origin', ORIGIN)
                 self.end_headers(); self.wfile.write(body); return
-        if u.path.startswith('/api/admin/') and ADMIN and (q.get('token') or [''])[0] == ADMIN:
-            with db() as c:
-                if u.path == '/api/admin/nodes':
-                    return self.send(200, [dict(r) for r in c.execute("SELECT id, t, fam FROM nodes ORDER BY t")])
-                if u.path == '/api/admin/items':
-                    node = (q.get('node') or [''])[0]
-                    return self.send(200, {'node': dict(c.execute("SELECT * FROM nodes WHERE id=?", (node,)).fetchone() or {}),
-                        'items': [dict(r) for r in c.execute("SELECT * FROM items WHERE node_id=? ORDER BY kind, pos, id", (node,))]})
+        if u.path.startswith('/api/admin'):
+            if not self.admin_ok(q): return self.send(403, {'error': 'interdit'})
+            return self.admin_get(u.path, q)
         if u.path == '/api/state':
             voter = (q.get('voter') or [''])[0]
             with db() as c:
@@ -200,13 +296,9 @@ class H(BaseHTTPRequestHandler):
                 if VOTER_RE.match(voter):
                     mine = {r['key']: r['vote'] for r in c.execute("SELECT key, vote FROM votes WHERE voter=?", (voter,))}
                 return self.send(200, {'counts': counts_for(c), 'mine': mine})
-        if u.path == '/api/admin' and ADMIN and (q.get('token') or [''])[0] == ADMIN:
-            with db() as c:
-                return self.send(200, {
-                    'suggestions': [dict(r) for r in c.execute("SELECT * FROM suggestions ORDER BY id DESC LIMIT 500")],
-                    'reports': [dict(r, text=(c.execute("SELECT text FROM items WHERE id=?", (int(r['key'][1:]),)).fetchone() or [None])[0] if str(r['key']).startswith('c') and str(r['key'])[1:].isdigit() else r['key']) for r in c.execute("SELECT * FROM reports ORDER BY id DESC LIMIT 500")]})
         if u.path == '/admin' and ADMIN:
-            return self.send(200, ADMIN_HTML.encode(), 'text/html; charset=utf-8')
+            p = os.path.join(HERE, 'admin.html')
+            if os.path.exists(p): return self.send(200, open(p, 'rb').read(), 'text/html; charset=utf-8')
         if u.path in ('/', '/index.html') and STATIC:
             p = os.path.join(HERE, STATIC)
             if os.path.exists(p):
@@ -229,40 +321,9 @@ class H(BaseHTTPRequestHandler):
         except Exception:
             return self.send(400, {'error': 'json invalide'})
         pth = urlparse(self.path).path
-        if pth.startswith('/api/admin/'):
-            if not ADMIN or d.get('token') != ADMIN: return self.send(403, {'error': 'interdit'})
-            with LOCK, db() as c:
-                if pth == '/api/admin/approve':
-                    sid = int(d.get('id', 0)); r = c.execute("SELECT * FROM suggestions WHERE id=?", (sid,)).fetchone()
-                    if not r: return self.send(404, {'error': 'introuvable'})
-                    if d.get('approved'):
-                        if r['item_id']: c.execute("UPDATE items SET visible=1 WHERE id=?", (r['item_id'],))
-                        else:
-                            pos = (c.execute("SELECT COALESCE(MAX(pos),0)+1 FROM items WHERE node_id=? AND kind='tab'", (r['node'],)).fetchone()[0])
-                            cur = c.execute("INSERT INTO items(node_id,kind,pos,text,grp,dist,visible,source) VALUES(?,?,?,?,?,0,1,'visiteur')", (r['node'], 'tab', pos, r['text'], 'a'))
-                            c.execute("UPDATE suggestions SET item_id=? WHERE id=?", (cur.lastrowid, sid))
-                    elif r['item_id']: c.execute("UPDATE items SET visible=0 WHERE id=?", (r['item_id'],))
-                    c.execute("UPDATE suggestions SET approved=? WHERE id=?", (1 if d.get('approved') else 0, sid))
-                    return self.send(200, {'ok': True})
-                if pth == '/api/admin/item':
-                    text = str(d.get('text', '')).strip()[:600]; kind = d.get('kind', 'tab')
-                    if kind not in ('tab', 'moi', 'note', 'conf') or not text: return self.send(400, {'error': 'paramètres'})
-                    grp = d.get('grp') if d.get('grp') in ('o', 'm', 'a') else 'a'
-                    vals = (text, kind, grp, 1 if d.get('dist') else 0, 0 if d.get('visible') is False or d.get('visible') == 0 else 1)
-                    if d.get('id'):
-                        c.execute("UPDATE items SET text=?, kind=?, grp=?, dist=?, visible=? WHERE id=?", vals + (int(d['id']),))
-                        return self.send(200, {'id': int(d['id'])})
-                    node = str(d.get('node', ''))
-                    if not c.execute("SELECT 1 FROM nodes WHERE id=?", (node,)).fetchone(): return self.send(404, {'error': 'étape inconnue'})
-                    pos = c.execute("SELECT COALESCE(MAX(pos),0)+1 FROM items WHERE node_id=? AND kind=?", (node, kind)).fetchone()[0]
-                    cur = c.execute("INSERT INTO items(text,kind,grp,dist,visible,node_id,pos,source) VALUES(?,?,?,?,?,?,?,'admin')", vals + (node, pos))
-                    return self.send(200, {'id': cur.lastrowid})
-                if pth == '/api/admin/node':
-                    nid = str(d.get('id', ''))
-                    for f in ('t', 'bio', 'fam', 'ev', 'sexe', 'via'):
-                        if f in d: c.execute(f"UPDATE nodes SET {f}=? WHERE id=?", (str(d[f]) if d[f] not in (None, '') else None, nid))
-                    return self.send(200, {'ok': True})
-            return self.send(404, {'error': 'not found'})
+        if pth.startswith('/api/admin'):
+            if not self.admin_ok({}, d): return self.send(403, {'error': 'interdit'})
+            return self.admin_post(pth, d)
         voter = str(d.get('voter', ''))
         if not VOTER_RE.match(voter): return self.send(400, {'error': 'voter invalide'})
         now = int(time.time()); p = urlparse(self.path).path
