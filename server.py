@@ -77,7 +77,7 @@ def init():
                 c.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT")
                 c.execute(f"UPDATE {tbl} SET {col}=strftime('%Y-%m-%d %H:%M:%S', {src}, 'unixepoch')")
             except sqlite3.OperationalError: pass
-        for tbl, col in (('suggestions', 'decided_at'), ('reports', 'handled_at')):   # quand l'admin a traité
+        for tbl, col in (('suggestions', 'decided_at'), ('reports', 'handled_at'), ('reports', 'new_text')):   # quand l'admin a traité
             try: c.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT")
             except sqlite3.OperationalError: pass
         # corrections manuelles des totaux de likes/dislikes (ajoutées aux vrais votes)
@@ -439,6 +439,29 @@ class H(BaseHTTPRequestHandler):
             if pth == '/api/admin/report':
                 rid = int(d.get('id', 0)); action = d.get('action')
                 keys = [d['key']] if d.get('key') else []
+                if action in ('apply_text', 'reject_text'):   # correction de texte proposée par un visiteur
+                    r = c.execute("SELECT * FROM reports WHERE id=?", (rid,)).fetchone()
+                    if not r or not r['new_text']: return self.send(404, {'error': 'aucune correction'})
+                    if action == 'reject_text':
+                        c.execute("UPDATE reports SET new_text=NULL WHERE id=?", (rid,)); return self.send(200, {'ok': True})
+                    new = re.sub(r'\s+', ' ', clean_text(d.get('text') or r['new_text'], 400))
+                    if not new: return self.send(400, {'error': 'texte vide'})
+                    old, nid, nname, iid = resolve_key(c, r['key'])
+                    if not iid:
+                        row = c.execute("SELECT id FROM items WHERE node_id=? AND text=?", (nid, old)).fetchone() if nid else None
+                        iid = row['id'] if row else None
+                    if not iid: return self.send(404, {'error': 'critère introuvable'})
+                    cur = c.execute("SELECT text FROM items WHERE id=?", (iid,)).fetchone()['text']
+                    pre = cur[:2] if cur[:2] in ('★ ', '▪ ', '◆ ') else ''          # garde la marque d'origine
+                    if new[:2] in ('★ ', '▪ ', '◆ '): pre = ''
+                    final = pre + new
+                    c.execute("UPDATE items SET text=? WHERE id=?", (final, iid))
+                    if not r['key'].startswith('c'):   # clé par texte : déplacer votes, ajustements et signalements vers la nouvelle clé
+                        nk = '%s|%s' % (nid, final)
+                        for tbl in ('votes', 'adjust'): c.execute(f"UPDATE OR IGNORE {tbl} SET key=? WHERE key=?", (nk, r['key']))
+                        c.execute("UPDATE reports SET key=? WHERE key=?", (nk, r['key']))
+                    c.execute("UPDATE reports SET handled=1, handled_at=strftime('%Y-%m-%d %H:%M:%S','now'), new_text=NULL WHERE id=?", (rid,))
+                    return self.send(200, {'ok': True, 'text': final})
                 if isinstance(d.get('ids'), list) and action in ('handled', 'unhandled', 'delete'):   # action sur une sélection de signalements
                     ids = [int(x) for x in d['ids'][:5000]]
                     for i in ids:
@@ -609,7 +632,9 @@ class H(BaseHTTPRequestHandler):
             if p == '/api/report':
                 if not valid_key(c, str(d.get('key', ''))[:300]): return self.send(400, {'error': 'critère inconnu'})
                 if c.execute("SELECT COUNT(*) FROM reports WHERE voter=? AND ts>?", (voter, now - 86400)).fetchone()[0] >= 50: return self.send(429, {'error': 'trop de signalements'})
-                c.execute("INSERT INTO reports(voter,key,reason,comment,ts,created_at) VALUES(?,?,?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch'))", (voter, str(d.get('key', ''))[:300], clean_text(d.get('reason'), 50), clean_text(d.get('comment'), 400), now, now))
+                rkey = str(d.get('key', ''))[:300]; ntext = re.sub(r'\s+', ' ', clean_text(d.get('new_text'), 400))
+                if ntext and ntext == re.sub(r'\s+', ' ', resolve_key(c, rkey)[0] or '').lstrip('★▪◆ ').strip(): ntext = ''   # identique : pas une correction
+                c.execute("INSERT INTO reports(voter,key,reason,comment,ts,created_at,new_text) VALUES(?,?,?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch'),?)", (voter, rkey, clean_text(d.get('reason'), 50), clean_text(d.get('comment'), 400), now, now, ntext or None))
                 return self.send(200, {'ok': True})
         self.send(404, {'error': 'not found'})
 

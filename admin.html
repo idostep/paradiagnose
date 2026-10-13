@@ -125,6 +125,12 @@ function renderSg(){const root=$('sg');root.innerHTML='';const S=DATA.suggestion
     s.status==='approved'?el('button',{class:'b',on:{click:act('reset','Retirée')}},'Retirer'):'',s.status!=='rejected'?el('button',{class:'b d',on:{click:act('reject','Refusée')}},'Refuser'):el('button',{class:'b',on:{click:act('reset','Remise en attente')}},'Remettre en attente'),
     el('button',{class:'b d',on:{click:()=>{if(confirm('Supprimer définitivement ?'))act('delete','Supprimée')()}}},'Supprimer'),
     el('button',{class:'b',on:{click:()=>openNode(s.node)}},'Voir l’étape')));root.append(card)})}
+/* ---------- correction de texte proposée dans un signalement ---------- */
+function propBlock(r,r0){const t=el('input',{type:'text',value:r.new_text,style:'width:100%;box-sizing:border-box'});
+ return el('div',{class:'card ok',style:'margin:6px 0 2px'},el('div',{class:'meta'},'Correction proposée'+(r.initials?' par '+r.initials:'')+' :'),
+  el('div',{class:'meta'},'avant : ',el('s',{},r0.text||'')),el('div',{class:'row'},t),
+  el('div',{class:'row'},el('button',{class:'b p',on:{click:async()=>{const j=await post('/api/admin/report',{id:r.id,action:'apply_text',text:t.value});if(j.error)return toast(j.error);toast('Texte modifié');load();if(CUR==='vt')loadVotes()}}},'Confirmer la modification'),
+   el('button',{class:'b d',on:{click:async()=>{await post('/api/admin/report',{id:r.id,action:'reject_text'});toast('Proposition refusée');load()}}},'Refuser la proposition')))}
 /* ---------- signalements ---------- */
 function renderRp(){const root=$('rp');root.innerHTML='';const by={};DATA.reports.filter(r=>inR(r.ts)).forEach(r=>(by[r.key]=by[r.key]||[]).push(r));
  const groups=Object.values(by).map(a=>({a,open:a.some(r=>!r.handled)}));const L0=()=>groups.filter(g=>FR==='all'||(FR==='new')===g.open);
@@ -140,7 +146,7 @@ function renderRp(){const root=$('rp');root.innerHTML='';const by={};DATA.report
   card.append(el('div',{class:'meta'},el('input',{type:'checkbox',class:'sel',checked:a.every(r=>SELR.has(r.id)),on:{change:e=>{a.forEach(r=>e.target.checked?SELR.add(r.id):SELR.delete(r.id))}}}),' étape ',el('b',{},r0.node_name||'?'),r0.visible===0?' · ':'',r0.visible===0?el('span',{class:'tag r'},'masqué'):''),
    el('div',{style:'font-weight:600;margin:2px 0 6px'},r0.text||key),
    el('div',{},Object.entries(counts).map(([k,n])=>el('span',{class:'tag y'},(REASONS[k]||k)+' × '+n))),
-   ...a.map(r=>el('div',{class:'cm'},el('span',{class:'meta'},when(r.ts)+' · '+(REASONS[r.reason]||r.reason)+' · '+(r.initials?r.initials+' ':'')+'visiteur '+r.voter+(r.handled?' · traité'+(r.handled_at?' le '+utc(r.handled_at):''):'')),r.comment?el('div',{},r.comment):'')));
+   ...a.map(r=>el('div',{class:'cm'},el('span',{class:'meta'},when(r.ts)+' · '+(REASONS[r.reason]||r.reason)+' · '+(r.initials?r.initials+' ':'')+'visiteur '+r.voter+(r.handled?' · traité'+(r.handled_at?' le '+utc(r.handled_at):''):'')),r.comment?el('div',{},r.comment):'',r.new_text?propBlock(r,r0):'')));
   if(r0.item_id)card.append(likesEditor('c'+r0.item_id,r0.u,r0.d,null,null,load));
   card.append(el('div',{class:'row'},open?el('button',{class:'b p',on:{click:act('handled',{},'Marqué traité')}},'Marquer traité'):el('button',{class:'b',on:{click:act('unhandled',{},'Rouvert')}},'Rouvrir'),
     r0.item_id&&r0.visible!==0?el('button',{class:'b d',on:{click:act('hide_item',{item_id:r0.item_id},'Critère masqué')}},'Masquer le critère'):'',
