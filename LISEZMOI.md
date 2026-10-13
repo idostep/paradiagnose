@@ -35,8 +35,8 @@ Puis ouvrir `https://ton-domaine/admin` et se connecter. La session est un cooki
 - **Critères** : modifier/ajouter/masquer les critères d'une étape.
 - **Base de données** : **Exporter en JSON** (`cle-AAAAMMJJ-HHMM.json` : `{format, version, tables:{nom:[{colonne:valeur}]}}`, lisible et facile à convertir si le format change) ou en `.db` (copie SQLite brute). **Importer** accepte l'un ou l'autre (case + confirmation) et remplace le contenu ; à l'import JSON, les colonnes inconnues sont ignorées et les colonnes absentes prennent leur valeur par défaut. L'ancienne base est d'abord copiée à côté : `cle.db.avant-import-…`. Les comptes admin ne sont jamais exportés et sont conservés à l'import.
 
-## Initiales des visiteurs
-À la première visite la page demande des initiales (2–8 lettres), gardées dans un cookie d’un an (et localStorage). Elles sont enregistrées dans la table `voters` et affichées dans l’admin à côté des suggestions et signalements ; un lien en bas de page permet de les modifier.
+## Bienvenue et initiales des visiteurs
+À la première visite la page affiche un mode d’emploi (étoiles, likes, critères distinctifs, signalements, suggestions) puis demande des initiales (1–8 lettres), gardées dans un cookie d’un an (et localStorage). Elles sont enregistrées dans la table `voters` et affichées dans l’admin à côté des suggestions et signalements ; le lien « Comment ça marche ? » en bas de page rouvre le mode d’emploi et permet de modifier les initiales.
 
 ## Dates enregistrées
 Chaque ligne garde son horodatage (UTC, base `cle.db`) : votes (`ts` = dernier changement, `created_at` = 1er vote), suggestions et signalements (`ts`, `created_at`), initiales (`voters.created_at`), et quand l'admin a traité : `suggestions.decided_at` (approuvée/refusée), `reports.handled_at`. L'admin les affiche en heure locale.

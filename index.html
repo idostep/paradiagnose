@@ -728,24 +728,38 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!m.hidden)close()})
 m.addEventListener('change',e=>{if(e.target.classList.contains('rpck')){const rt=m.querySelector('.rpt');rt.hidden=!e.target.checked;if(e.target.checked)rt.focus()}});
 m.addEventListener('submit',e=>{e.preventDefault();const nt=m.querySelector('.rpck').checked?m.querySelector('.rpt').value.replace(/\s+/g,' ').trim():'';const rs={voter:VID,key:cur,reason:m.querySelector('input[name=rr]:checked').value,comment:m.querySelector('.rpcm').value.trim()};if(nt&&nt!==m.dataset.cur)rs.new_text=nt;try{const k='cle-reports',a=JSON.parse(localStorage.getItem(k)||'[]');a.push(Object.assign({date:Date.now()},rs));localStorage.setItem(k,JSON.stringify(a))}catch(_){}api('/api/report',rs);m.querySelector('.rpmsg').textContent='Merci, signalé !';setTimeout(close,900)})})();
 
-/* ---------- initiales du visiteur (demandées à la première visite, gardées en cookie) ---------- */
+/* ---------- bienvenue : mode d'emploi + initiales (1re visite, gardées en cookie) ---------- */
 (function(){
- const CK='cle-ini';
- const rd=()=>{let v='';try{const m=document.cookie.match(/(?:^|;\s*)cle-ini=([^;]*)/);if(m)v=decodeURIComponent(m[1])}catch(_){}if(!v){try{v=localStorage.getItem(CK)||''}catch(_){}}return v};
- const wr=v=>{try{document.cookie=CK+'='+encodeURIComponent(v)+'; Max-Age=31536000; Path=/; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'')}catch(_){}try{localStorage.setItem(CK,v)}catch(_){}};
+ const CK='cle-ini',HK='cle-aide';
+ const rdc=k=>{let v='';try{const m=document.cookie.match(new RegExp('(?:^|;\\s*)'+k+'=([^;]*)'));if(m)v=decodeURIComponent(m[1])}catch(_){}if(!v){try{v=localStorage.getItem(k)||''}catch(_){}}return v};
+ const wrc=(k,v)=>{try{document.cookie=k+'='+encodeURIComponent(v)+'; Max-Age=31536000; Path=/; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'')}catch(_){}try{localStorage.setItem(k,v)}catch(_){}};
+ const rd=()=>rdc(CK),wr=v=>wrc(CK,v);
  const send=v=>{if(API!==null)api('/api/profile',{voter:VID,initials:v})};
  const m=document.createElement('div');m.className='rpm';m.hidden=true;m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');
- m.innerHTML='<form class="rpb"><h3>Tes initiales</h3><p style="margin:0 0 8px;font-size:14.5px">Pour savoir qui vote, signale ou propose un critère. Elles sont gardées sur cet appareil (cookie) et tu ne les retapes pas.</p><input class="inim" type="text" maxlength="8" autocomplete="off" autocapitalize="characters" placeholder="ex. AB" style="width:100%;box-sizing:border-box;font:inherit;font-size:16px;text-transform:uppercase;padding:8px 10px;border:1px solid rgba(128,128,128,.4);border-radius:8px;background:transparent;color:inherit"><div class="rpr"><span class="rpmsg"></span><button type="submit" class="rps" style="background:var(--green);border-color:var(--green)">Valider</button></div></form>';
+ const li=(ic,h,p)=>'<li><span class="hi">'+ic+'</span><span><b>'+h+'</b> '+p+'</span></li>';
+ m.innerHTML='<form class="rpb hlp"><h3>Bienvenue 👋</h3><p class="hl0">Cette clé s’améliore grâce à vous. Voici comment ça marche :</p><ul class="hlst">'+
+  li('★','Étoile ★ :','le critère est décrit dans la thèse (vérifié par des enseignants). Cite-les en premier. ▪ = poly d’entomologie ; sans marque = critère de l’arbre.')+
+  li('👍 👎','Like / dislike :','👍 si le critère est juste et utile, 👎 s’il ne l’est pas. Un seul vote par critère, que tu peux changer ou retirer en recliquant. Le chiffre affiché = likes − dislikes ; les critères sont triés par ce score.')+
+  li('<span class="hdg">⚑</span>','Critère distinctif :','il permet de séparer ce taxon d’un autre. Il reçoit un drapeau jaune et un surlignage quand son score atteint 3 ; il le perd si le score retombe.')+
+  li('➖','Critère masqué :','à −3 un critère passe dans la liste « masqué » (dépliable, rien n’est supprimé). Un critère du poly sort de sa liste dès qu’il a un like de plus que de dislikes.')+
+  li('<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h13l-2 4 2 4H5"/></svg>','Signaler :','le petit drapeau gris à droite d’un critère : information fausse, mal classé, doublon… Tu peux aussi proposer une correction du texte ; un administrateur confirme avant que ça change.')+
+  li('＋','Proposer un critère :','« + Suggérer un critère » sous les listes. Il apparaît pour tous dès qu’un administrateur l’a validé.')+
+  '</ul><p class="hl0"><b>Tes initiales</b>, pour savoir qui vote, signale ou propose (gardées sur cet appareil) :</p><input class="inim" type="text" maxlength="8" autocomplete="off" autocapitalize="characters" placeholder="ex. AB" style="width:100%;box-sizing:border-box;font:inherit;font-size:16px;text-transform:uppercase;padding:8px 10px;border:1px solid rgba(128,128,128,.4);border-radius:8px;background:transparent;color:inherit"><div class="rpr"><span class="rpmsg"></span><button type="button" class="rpx hclose" hidden>Fermer</button><button type="submit" class="rps" style="background:var(--green);border-color:var(--green)">Commencer</button></div></form>';
+ const st=document.createElement('style');st.textContent='.rpb.hlp{max-width:480px}.hlp h3{font-size:20px}.hl0{margin:6px 0;font-size:14.5px}.hlst{list-style:none;margin:8px 0;padding:0;display:grid;gap:9px}.hlst li{display:flex;gap:10px;font-size:14px;line-height:1.35}.hlst .hi{flex:0 0 38px;text-align:center;font-weight:800;color:var(--aca);font-size:16px;line-height:1.3}.hlst .hdg{background:#FFF1B8;color:#3a2c00;border-radius:4px;padding:0 4px}';document.head.appendChild(st);
  document.body.appendChild(m);
- const inp=m.querySelector('.inim'),msg=m.querySelector('.rpmsg');
- function ask(){inp.value=rd();msg.textContent='';m.hidden=false;setTimeout(()=>inp.focus(),50)}
- m.addEventListener('submit',e=>{e.preventDefault();const v=inp.value.trim().toUpperCase();if(!/^[A-ZÀ-ÖØ-Þ][A-ZÀ-ÖØ-Þ.\- ]{0,7}$/.test(v)){msg.textContent='Lettres uniquement (8 max).';return}wr(v);send(v);m.hidden=true;paint()});
+ const inp=m.querySelector('.inim'),msg=m.querySelector('.rpmsg'),cl=m.querySelector('.hclose'),go=m.querySelector('.rps');
+ function open(){const v=rd();inp.value=v;msg.textContent='';cl.hidden=!v;go.textContent=v?'Enregistrer':'Commencer';m.hidden=false;m.querySelector('.rpb').scrollTop=0}
+ const shut=()=>{m.hidden=true};
+ cl.onclick=shut;m.addEventListener('mousedown',e=>{if(e.target===m&&rd())shut()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!m.hidden&&rd())shut()});
+ m.addEventListener('submit',e=>{e.preventDefault();const v=inp.value.trim().toUpperCase();if(!/^[A-ZÀ-ÖØ-Þ][A-ZÀ-ÖØ-Þ.\- ]{0,7}$/.test(v)){msg.textContent='Lettres uniquement (8 max).';return}wr(v);wrc(HK,'1');send(v);shut();paint()});
  const link=document.createElement('button');link.type='button';link.className='sugb';link.style.cssText='display:block;margin:8px auto 0';
  const ft=document.querySelector('footer');if(ft)ft.appendChild(link);
- function paint(){const v=rd();link.textContent=v?'Initiales : '+v+' (modifier)':'Indiquer mes initiales'}
- link.onclick=ask;paint();
- const v=rd();if(v){wr(v);send(v)}else ask();
+ function paint(){const v=rd();link.textContent=v?'Comment ça marche ? · Initiales : '+v:'Comment ça marche ? · Indiquer mes initiales'}
+ link.onclick=open;paint();
+ const v=rd();if(v){wr(v);send(v)}
+ if(!v||!rdc(HK))open();
 })();
+
 </script>
 <script>fetch('/api/content').then(r=>{if(!r.ok)throw 0;return r.json()}).then(c=>{window.__C=c;const s=document.createElement('script');s.textContent=document.getElementById('app').textContent;document.body.appendChild(s)}).catch(()=>{document.body.insertAdjacentHTML('afterbegin','<p style="padding:16px">Impossible de charger le contenu (serveur indisponible).</p>')})</script>
 </body>
