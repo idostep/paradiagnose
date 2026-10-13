@@ -28,7 +28,7 @@ Puis ouvrir `https://ton-domaine/admin` et se connecter. La session est un cooki
 - **Signalements** : regroupés par critère (motifs, commentaires, likes/dislikes) ; marquer traité, masquer/réafficher le critère, supprimer.
 - **Votes** : fixer le nombre de 👍/👎 affichés d'un critère (les vrais votes restent dans la base, l'écart va dans `adjust`) ou remettre à zéro.
 - **Critères** : modifier/ajouter/masquer les critères d'une étape.
-- **Base de données** : **Exporter** télécharge `cle-AAAAMMJJ-HHMM.db` (tout le contenu, sans les comptes admin) ; **Importer** remplace le contenu par celui d'un fichier `.db` exporté (case + confirmation). L'ancienne base est d'abord copiée à côté : `cle.db.avant-import-AAAAMMJJ-HHMMSS`. Les comptes admin sont conservés. Pour lire le contenu en SQL : `sqlite3 cle-….db .dump`.
+- **Base de données** : **Exporter en JSON** (`cle-AAAAMMJJ-HHMM.json` : `{format, version, tables:{nom:[{colonne:valeur}]}}`, lisible et facile à convertir si le format change) ou en `.db` (copie SQLite brute). **Importer** accepte l'un ou l'autre (case + confirmation) et remplace le contenu ; à l'import JSON, les colonnes inconnues sont ignorées et les colonnes absentes prennent leur valeur par défaut. L'ancienne base est d'abord copiée à côté : `cle.db.avant-import-…`. Les comptes admin ne sont jamais exportés et sont conservés à l'import.
 
 ## Sauvegarde
 Fais un export de temps en temps (ou `cp cle.db sauvegarde.db` serveur arrêté).

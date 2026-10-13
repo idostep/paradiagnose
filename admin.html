@@ -154,11 +154,12 @@ function row(i,k,node,isNew){const card=el('div',{class:'card item'+(i.visible?'
  card.append(el('div',{class:'row'},el('button',{class:'b p',on:{click:async()=>{if(!t.value.trim())return;await post('/api/admin/item',{id:i.id,node,kind:k,text:t.value,grp:g.value,dist:d.checked,visible:v.checked});toast(isNew?'Ajouté':'Enregistré');loadItems(node)}}},isNew?'Ajouter':'Enregistrer')));
  return card}
 /* ---------- base de données : export / import ---------- */
+const BTN='text-decoration:none;display:inline-block;border:1px solid var(--green-soft);border-radius:10px;padding:8px 14px;font-weight:700;background:var(--green-soft);color:var(--ink);margin-right:8px';
 function renderDb(){const root=$('db');root.innerHTML='';
- const file=el('input',{type:'file',accept:'.db,.sqlite,.sqlite3,application/vnd.sqlite3,application/octet-stream'}),ok=el('input',{type:'checkbox'}),res=el('div',{class:'meta'});
- root.append(el('h3',{},'Exporter la base'),el('div',{class:'card'},el('div',{class:'meta'},'Télécharge un fichier SQLite (.db) avec tout le contenu : arbre, critères, glossaire, votes, suggestions, signalements. Les comptes admin et mots de passe ne sont jamais inclus.'),
-  el('div',{class:'row'},el('a',{href:'/api/admin/export',class:'b p',style:'text-decoration:none;display:inline-block;border:1px solid var(--green-soft);border-radius:10px;padding:8px 14px;font-weight:700;background:var(--green-soft);color:var(--ink)'},'Télécharger la base (.db)'))),
-  el('h3',{},'Importer une base'),el('div',{class:'card'},el('div',{class:'meta'},'Remplace tout le contenu actuel (critères, votes, suggestions, signalements) par celui du fichier. Tes comptes admin restent inchangés. L’ancienne base est d’abord copiée sur le serveur (cle.db.avant-import-…).'),
+ const file=el('input',{type:'file',accept:'.json,.db,.sqlite,.sqlite3,application/json,application/vnd.sqlite3,application/octet-stream'}),ok=el('input',{type:'checkbox'}),res=el('div',{class:'meta'});
+ root.append(el('h3',{},'Exporter la base'),el('div',{class:'card'},el('div',{class:'meta'},'Télécharge tout le contenu : arbre, critères, glossaire, votes, suggestions, signalements. Les comptes admin et mots de passe ne sont jamais inclus. Le JSON est lisible et facile à adapter si le format change ; le .db est la copie brute SQLite.'),
+  el('div',{class:'row'},el('a',{href:'/api/admin/export?format=json',class:'b p',style:BTN},'Télécharger en JSON'),el('a',{href:'/api/admin/export',class:'b',style:BTN},'Télécharger en .db (SQLite)'))),
+  el('h3',{},'Importer une sauvegarde (.json ou .db)'),el('div',{class:'card'},el('div',{class:'meta'},'Remplace tout le contenu actuel (critères, votes, suggestions, signalements) par celui du fichier (JSON ou .db exporté ici). Tes comptes admin restent inchangés. L’ancienne base est d’abord copiée sur le serveur (cle.db.avant-import-…).'),
   el('div',{class:'row'},file),el('div',{class:'row'},el('label',{},ok,' Je comprends que ça remplace le contenu actuel'),
    el('button',{class:'b d',on:{click:async()=>{if(!file.files[0])return toast('Choisis un fichier');if(!ok.checked)return toast('Coche la case de confirmation');
      if(!confirm('Remplacer toute la base par « '+file.files[0].name+' » ?'))return;res.textContent='Import en cours…';

@@ -170,6 +170,44 @@ def export_db_bytes():
     finally:
         os.remove(tmp)
 
+def export_json_bytes():
+    """tout le contenu en JSON lisible : {format, version, tables:{nom:[{colonne:valeur}]}} (sans comptes admin)"""
+    with db() as c:
+        tables = {}
+        for t in SYNC_TABLES:
+            tables[t] = [dict(r) for r in c.execute(f"SELECT * FROM {t}")]
+    doc = {'format': 'cle-export', 'version': 1, 'exported': time.strftime('%Y-%m-%dT%H:%M:%S'), 'tables': tables}
+    return json.dumps(doc, ensure_ascii=False, indent=1).encode()
+
+def import_json_bytes(data):
+    """importe un export JSON ; tolérant : colonnes inconnues ignorées, colonnes absentes laissées par défaut"""
+    try: doc = json.loads(data.decode('utf-8'))
+    except Exception: raise ValueError('JSON illisible.')
+    if not isinstance(doc, dict) or doc.get('format') != 'cle-export' or not isinstance(doc.get('tables'), dict):
+        raise ValueError("Ce JSON n'est pas un export de la clé (format « cle-export » attendu).")
+    T = doc['tables']
+    if not isinstance(T.get('nodes'), list) or not isinstance(T.get('items'), list): raise ValueError('Tables nodes / items absentes.')
+    backup = DB + '.avant-import-' + time.strftime('%Y%m%d-%H%M%S')
+    with LOCK:
+        src = db(); dst = sqlite3.connect(backup); src.backup(dst); dst.close(); src.close()
+        c = db(); counts = {}
+        try:
+            for t in SYNC_TABLES:
+                rows = T.get(t)
+                if not isinstance(rows, list): continue
+                mine = [r[1] for r in c.execute(f"PRAGMA main.table_info({t})")]
+                c.execute(f"DELETE FROM main.{t}")
+                for row in rows:
+                    if not isinstance(row, dict): continue
+                    cols = [k for k in mine if k in row]
+                    if cols: c.execute(f"INSERT INTO main.{t}({','.join(cols)}) VALUES({','.join('?' * len(cols))})", [row[k] if isinstance(row[k], (int, float, str, type(None))) else json.dumps(row[k], ensure_ascii=False) for k in cols])
+                counts[t] = c.execute(f"SELECT COUNT(*) FROM main.{t}").fetchone()[0]
+            c.commit()
+        except Exception:
+            c.rollback(); raise
+        finally: c.close()
+    return counts, os.path.basename(backup)
+
 def import_db_bytes(data):
     """remplace le contenu par celui d'un fichier .db exporté ; garde les comptes admin ; sauvegarde l'ancienne base avant"""
     if not data.startswith(b'SQLite format 3\x00'): raise ValueError("Ce n'est pas un fichier SQLite.")
@@ -306,6 +344,8 @@ class H(BaseHTTPRequestHandler):
                     items.append(it)
                 return self.send(200, {'node': dict(n) if n else {}, 'items': items})
             if path == '/api/admin/export':
+                if (q.get('format') or [''])[0] == 'json':
+                    return self.send(200, export_json_bytes(), 'application/json; charset=utf-8', extra={'Content-Disposition': 'attachment; filename="cle-%s.json"' % time.strftime('%Y%m%d-%H%M')})
                 body = export_db_bytes()
                 return self.send(200, body, 'application/vnd.sqlite3', extra={'Content-Disposition': 'attachment; filename="cle-%s.db"' % time.strftime('%Y%m%d-%H%M')})
             if path == '/api/admin/votes':
@@ -466,7 +506,8 @@ class H(BaseHTTPRequestHandler):
             if not self.admin_ok(write=True): return self.send(403, {'error': 'interdit'})
             n = self.body_len(200_000_000)
             if n is None: return self.send(413, {'error': 'taille invalide ou fichier trop gros'})
-            try: counts, backup = import_db_bytes(self.rfile.read(n))
+            raw = self.rfile.read(n)
+            try: counts, backup = import_json_bytes(raw) if raw.lstrip()[:1] == b'{' else import_db_bytes(raw)
             except ValueError as e: return self.send(400, {'error': str(e)})
             except Exception as e: return self.send(500, {'error': 'Import impossible : ' + str(e)})
             return self.send(200, {'ok': True, 'counts': counts, 'backup': backup})
