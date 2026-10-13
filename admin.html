@@ -34,6 +34,7 @@ button.b,a.b{color:var(--ink);font:inherit;font-weight:700;border:1px solid var(
 button.b:hover{background:var(--green-soft)}
 button.b.p{background:var(--green-soft);border-color:var(--green-soft)}button.b.p:hover{background:var(--green);color:var(--paper);border-color:var(--green)}
 button.b.d{color:var(--red);border-color:var(--red)}button.b.d:hover{background:var(--red-s)}
+.range{max-width:900px;margin:0 auto;padding:10px 16px 0}.range .in{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 12px}.range input[type=date]{font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit}
 .tag{display:inline-block;font-size:12.5px;font-weight:700;padding:1px 9px;border-radius:999px;border:1px solid var(--line);margin-right:4px;white-space:nowrap}
 .tag.r{background:var(--red-s);color:var(--red);border-color:var(--red)}.tag.g{background:var(--green-soft);color:var(--green);border-color:var(--green)}.tag.y{background:var(--aca-s);color:var(--aca);border-color:var(--aca)}
 .cm{margin:4px 0 4px 10px;padding-left:10px;border-left:3px solid var(--line);font-size:15px}
@@ -49,6 +50,7 @@ button.b.d{color:var(--red);border-color:var(--red)}button.b.d:hover{background:
 <div id="app" hidden>
 <header class="top"><h1>Administration</h1><span class="who" id="who"></span><a class="b" href="/" id="site" style="text-decoration:none;display:inline-block">← Voir le site</a><button class="b" id="out">Se déconnecter</button></header>
 <nav class="tabs"><div class="in"><button data-t="sg">Suggestions <span class="bd" id="bsg" hidden></span></button><button data-t="rp">Signalements <span class="bd" id="brp" hidden></span></button><button data-t="vt">Votes</button><button data-t="ed">Critères</button><button data-t="db">Base de données</button></div></nav>
+<div class="range" id="range" hidden></div>
 <main><section id="sg"></section><section id="rp" hidden></section><section id="vt" hidden></section><section id="ed" hidden></section><section id="db" hidden></section></main></div>
 <div id="toast"></div>
 <script>
@@ -74,12 +76,23 @@ function start(u){$('login').hidden=true;$('app').hidden=false;$('who').textCont
 /* ---------- onglets ---------- */
 let CUR='sg';
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
-function show(k){CUR=k;['sg','rp','vt','ed','db'].forEach(x=>$(x).hidden=x!==k);document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===k));
+function show(k){CUR=k;$('range').hidden=!['sg','rp','vt'].includes(k);['sg','rp','vt','ed','db'].forEach(x=>$(x).hidden=x!==k);document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===k));
  if(k==='ed'&&!$('ed').dataset.ok)initEd();if(k==='vt')loadVotes();if(k==='db')renderDb()}
-let DATA={suggestions:[],reports:[]},FS='pending',FR='new',SEL=new Set();
+/* ---------- plage de dates (suggestions, signalements, votes) ---------- */
+let DF='',DT='';
+const inR=ts=>{const t=ts*1000;if(DF&&t<new Date(DF+'T00:00:00').getTime())return false;if(DT&&t>=new Date(DT+'T00:00:00').getTime()+864e5)return false;return true};
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function refresh(){renderSg();renderRp();if(CUR==='vt')loadVotes()}
+function rangeBar(){const r=$('range');r.innerHTML='';
+ const f=el('input',{type:'date',value:DF,on:{change:()=>{DF=f.value;SEL.clear();SELR.clear();refresh()}}}),t=el('input',{type:'date',value:DT,on:{change:()=>{DT=t.value;SEL.clear();SELR.clear();refresh()}}});
+ const pre=(l,a,b)=>el('button',{class:'chip'+(DF===a&&DT===b?' on':''),on:{click:()=>{DF=a;DT=b;SEL.clear();SELR.clear();rangeBar();refresh()}}},l);
+ const now=new Date(),day=n=>{const d=new Date(now);d.setDate(d.getDate()-n);return ymd(d)};
+ r.append(el('div',{class:'in'},el('span',{class:'meta'},'Période'),'du',f,'au',t,pre('Aujourd’hui',day(0),day(0)),pre('7 jours',day(6),day(0)),pre('30 jours',day(29),day(0)),pre('Tout','','')))}
+let DATA={suggestions:[],reports:[]},FS='pending',FR='new',SEL=new Set(),SELR=new Set();
 async function load(){DATA=await get('/api/admin/overview');renderSg();renderRp();
  const ps=DATA.suggestions.filter(s=>s.status==='pending').length,nr=new Set(DATA.reports.filter(r=>!r.handled).map(r=>r.key)).size;
  $('bsg').hidden=!ps;$('bsg').textContent=ps;$('brp').hidden=!nr;$('brp').textContent=nr}
+rangeBar();
 function chips(list,cur,set){return el('div',{class:'bar'},list.map(([k,l,n])=>el('button',{class:'chip'+(cur===k?' on':''),on:{click:()=>set(k)}},l+(n!=null?' ('+n+')':''))))}
 /* éditeur de likes réutilisable */
 function likesEditor(key,u0,d0,realU,realD,after){const u=el('input',{type:'number',min:0,value:u0||0}),d=el('input',{type:'number',min:0,value:d0||0});
@@ -87,14 +100,14 @@ function likesEditor(key,u0,d0,realU,realD,after){const u=el('input',{type:'numb
   el('button',{class:'b',on:{click:async()=>{await post('/api/admin/votes',{key,u:+u.value,d:+d.value});toast('Votes modifiés');after&&after()}}},'Appliquer'),
   el('button',{class:'b d',on:{click:async()=>{if(confirm('Remettre les votes de ce critère à zéro ?')){await post('/api/admin/votes',{key,reset:true});toast('Votes remis à zéro');after&&after()}}}},'Remise à zéro'))}
 /* ---------- suggestions ---------- */
-function renderSg(){const root=$('sg');root.innerHTML='';const S=DATA.suggestions,c=s=>S.filter(x=>x.status===s).length;
+function renderSg(){const root=$('sg');root.innerHTML='';const S=DATA.suggestions.filter(x=>inR(x.ts)),c=s=>S.filter(x=>x.status===s).length;
  root.append(el('h3',{},'Suggestions de critères'),chips([['pending','En attente',c('pending')],['approved','Approuvées',c('approved')],['rejected','Refusées',c('rejected')],['all','Toutes',S.length]],FS,k=>{FS=k;SEL.clear();renderSg()}));
  const L=S.filter(x=>FS==='all'||x.status===FS);
  const cnt=el('span',{class:'meta'},SEL.size?SEL.size+' sélectionnée(s)':'');
  const bulk=a=>async()=>{const ids=[...SEL];if(!ids.length)return toast('Rien de sélectionné');if(a==='delete'&&!confirm('Supprimer définitivement '+ids.length+' suggestion(s) ?'))return;
   await post('/api/admin/suggestion',{ids,action:a});SEL.clear();toast(a==='delete'?'Supprimées':'Modifiées');load()};
  root.append(el('div',{class:'bar'},el('button',{class:'b',on:{click:()=>{L.forEach(s=>SEL.add(s.id));renderSg()}}},'Tout sélectionner'),el('button',{class:'b',on:{click:()=>{SEL.clear();renderSg()}}},'Aucune'),
-  el('button',{class:'b d',on:{click:bulk('delete')}},'Supprimer la sélection'),el('button',{class:'b',on:{click:bulk('reject')}},'Refuser la sélection'),cnt,el('span',{style:'flex:1'}),
+  el('button',{class:'b d',on:{click:bulk('delete')}},'Supprimer la sélection'),el('button',{class:'b p',on:{click:bulk('approve')}},'Approuver la sélection'),el('button',{class:'b',on:{click:bulk('reject')}},'Refuser la sélection'),cnt,el('span',{style:'flex:1'}),
   el('button',{class:'b d',on:{click:async()=>{if(confirm('Supprimer toutes les suggestions refusées ?')){await post('/api/admin/purge',{what:'rejected'});toast('Refusées supprimées');load()}}}},'Vider les refusées'),
   el('button',{class:'b d',on:{click:async()=>{if(confirm('Supprimer TOUTES les suggestions (les critères déjà approuvés seront masqués) ?')){await post('/api/admin/purge',{what:'all_suggestions'});SEL.clear();toast('Tout supprimé');load()}}}},'Tout supprimer')));
  if(!L.length)root.append(el('div',{class:'empty'},'Rien ici.'));
@@ -110,15 +123,18 @@ function renderSg(){const root=$('sg');root.innerHTML='';const S=DATA.suggestion
     el('button',{class:'b d',on:{click:()=>{if(confirm('Supprimer définitivement ?'))act('delete','Supprimée')()}}},'Supprimer'),
     el('button',{class:'b',on:{click:()=>openNode(s.node)}},'Voir l’étape')));root.append(card)})}
 /* ---------- signalements ---------- */
-function renderRp(){const root=$('rp');root.innerHTML='';const by={};DATA.reports.forEach(r=>(by[r.key]=by[r.key]||[]).push(r));
- const groups=Object.values(by).map(a=>({a,open:a.some(r=>!r.handled)}));const nOpen=groups.filter(g=>g.open).length;
+function renderRp(){const root=$('rp');root.innerHTML='';const by={};DATA.reports.filter(r=>inR(r.ts)).forEach(r=>(by[r.key]=by[r.key]||[]).push(r));
+ const groups=Object.values(by).map(a=>({a,open:a.some(r=>!r.handled)}));const L0=()=>groups.filter(g=>FR==='all'||(FR==='new')===g.open);
+ const rbulk=a=>async()=>{const ids=[...SELR];if(!ids.length)return toast('Rien de sélectionné');if(a==='delete'&&!confirm('Supprimer définitivement '+ids.length+' signalement(s) ?'))return;await post('/api/admin/report',{ids,action:a});SELR.clear();toast('Fait');load()};const nOpen=groups.filter(g=>g.open).length;
  root.append(el('h3',{},'Signalements'),chips([['new','À traiter',nOpen],['done','Traités',groups.length-nOpen],['all','Tous',groups.length]],FR,k=>{FR=k;renderRp()}),
+  el('div',{class:'bar'},el('button',{class:'b',on:{click:()=>{L0().forEach(g=>g.a.forEach(r=>SELR.add(r.id)));renderRp()}}},'Tout sélectionner'),el('button',{class:'b',on:{click:()=>{SELR.clear();renderRp()}}},'Aucune'),
+   el('button',{class:'b p',on:{click:rbulk('handled')}},'Marquer la sélection traitée'),el('button',{class:'b',on:{click:rbulk('unhandled')}},'Rouvrir la sélection'),el('button',{class:'b d',on:{click:rbulk('delete')}},'Supprimer la sélection'),el('span',{class:'meta'},SELR.size?SELR.size+' signalement(s) sélectionné(s)':'')),
   el('div',{class:'bar'},el('button',{class:'b d',on:{click:async()=>{if(confirm('Supprimer tous les signalements traités ?')){await post('/api/admin/purge',{what:'handled_reports'});toast('Supprimés');load()}}}},'Supprimer les traités')));
  const L=groups.filter(g=>FR==='all'||(FR==='new')===g.open);if(!L.length)root.append(el('div',{class:'empty'},'Rien ici.'));
  L.forEach(({a,open})=>{const r0=a[0],card=el('div',{class:'card '+(open?'new':'ok')});
-  const key=r0.key,act=(action,extra={},msg)=>async()=>{await post('/api/admin/report',Object.assign({key,action},extra));toast(msg||'ok');load()};
+  const key=r0.key,ids=a.map(r=>r.id),act=(action,extra={},msg)=>async()=>{await post('/api/admin/report',Object.assign(['handled','unhandled','delete'].includes(action)?{ids,action}:{key,action},extra));toast(msg||'ok');load()};
   const counts={};a.forEach(r=>counts[r.reason]=(counts[r.reason]||0)+1);
-  card.append(el('div',{class:'meta'},'étape ',el('b',{},r0.node_name||'?'),r0.visible===0?' · ':'',r0.visible===0?el('span',{class:'tag r'},'masqué'):''),
+  card.append(el('div',{class:'meta'},el('input',{type:'checkbox',class:'sel',checked:a.every(r=>SELR.has(r.id)),on:{change:e=>{a.forEach(r=>e.target.checked?SELR.add(r.id):SELR.delete(r.id))}}}),' étape ',el('b',{},r0.node_name||'?'),r0.visible===0?' · ':'',r0.visible===0?el('span',{class:'tag r'},'masqué'):''),
    el('div',{style:'font-weight:600;margin:2px 0 6px'},r0.text||key),
    el('div',{},Object.entries(counts).map(([k,n])=>el('span',{class:'tag y'},(REASONS[k]||k)+' × '+n))),
    ...a.map(r=>el('div',{class:'cm'},el('span',{class:'meta'},when(r.ts)+' · '+(REASONS[r.reason]||r.reason)+' · '+(r.initials?r.initials+' ':'')+'visiteur '+r.voter+(r.handled?' · traité'+(r.handled_at?' le '+utc(r.handled_at):''):'')),r.comment?el('div',{},r.comment):'')));
@@ -132,18 +148,23 @@ function renderRp(){const root=$('rp');root.innerHTML='';const by={};DATA.report
 let VF='';
 let VMODE='crit';
 const whoName=w=>w.ini?w.ini+' ('+w.voter+')':'visiteur '+w.voter;
-async function loadVotes(){const root=$('vt');const L=await get('/api/admin/votes');root.innerHTML='';
+async function loadVotes(){const root=$('vt');const L0=await get('/api/admin/votes');root.innerHTML='';const RG=!!(DF||DT);
+ const L=L0.map(x=>Object.assign({},x,{who:x.who.filter(w=>inR(w.ts))})).filter(x=>!RG||x.who.length);
  const f=el('input',{type:'text',placeholder:'Filtrer (critère, étape ou initiales)…',value:VF,on:{input:()=>{VF=f.value;draw()}}});
  const tg=el('div',{class:'bar'},...[['crit','Par critère'],['pers','Par personne']].map(([k,t])=>el('button',{class:'b'+(VMODE===k?' p':''),on:{click:()=>{VMODE=k;loadVotes()}}},t)));
- root.append(el('h3',{},'Votes'),tg,el('div',{class:'bar'},f),el('div',{id:'vtl'}));
+ root.append(el('h3',{},'Votes'),tg,el('div',{class:'bar'},f),el('div',{class:'bar',id:'vtb'}),el('div',{id:'vtl'}));
  const mark=w=>el('span',{class:'tag '+(w.vote==='u'?'g':'r')},(w.vote==='u'?'👍 ':'👎 ')+whoName(w)+' · '+when(w.ts)+(w.created_at&&w.created_at!==new Date(w.ts*1000).toISOString().slice(0,19).replace('T',' ')?' (1er vote '+utc(w.created_at)+')':''));
+ function delBar(pairs){const b=$('vtb');b.innerHTML='';if(!pairs.length)return;
+  b.append(el('span',{class:'meta'},pairs.length+' vote(s) dans cette sélection'+(RG?' (période choisie)':'')),el('button',{class:'b d',on:{click:async()=>{if(!confirm('Supprimer définitivement ces '+pairs.length+' vote(s) ? Les ajustements manuels ne sont pas touchés.'))return;const r=await post('/api/admin/votes',{delete_votes:pairs});toast(r.n+' vote(s) supprimé(s)');loadVotes()}}},'Supprimer ces votes'))}
  function draw(){const box=$('vtl');box.innerHTML='';const q=VF.toLowerCase();
   if(VMODE==='pers'){const P={};L.forEach(x=>x.who.forEach(w=>{const id=w.vid;(P[id]=P[id]||{w,v:[]}).v.push({x,w})}));
    const R=Object.values(P).filter(p=>!q||whoName(p.w).toLowerCase().includes(q)||p.v.some(e=>(e.x.text||'').toLowerCase().includes(q))).sort((a,b)=>b.v.length-a.v.length);
+   delBar(R.flatMap(p=>p.v.map(e=>({vid:e.w.vid,key:e.x.key}))));
    if(!R.length)box.append(el('div',{class:'empty'},'Aucun vote.'));
    R.forEach(p=>{const up=p.v.filter(e=>e.w.vote==='u').length;box.append(el('div',{class:'card'},el('div',{style:'font-weight:700'},whoName(p.w)),el('div',{class:'meta'},up+' like(s), '+(p.v.length-up)+' dislike(s)'),
     ...p.v.sort((a,b)=>b.w.ts-a.w.ts).map(e=>el('div',{class:'cm'},el('span',{class:'meta'},(e.w.vote==='u'?'👍 ':'👎 ')+when(e.w.ts)+' · étape '+(e.x.node_name||'?')+' · '),e.x.text))))});return}
   const R=L.filter(x=>!q||(x.text||'').toLowerCase().includes(q)||(x.node_name||'').toLowerCase().includes(q)||x.who.some(w=>whoName(w).toLowerCase().includes(q)));
+  delBar(R.flatMap(x=>x.who.map(w=>({vid:w.vid,key:x.key}))));
   if(!R.length)box.append(el('div',{class:'empty'},'Aucun vote.'));
   R.forEach(x=>{box.append(el('div',{class:'card'},el('div',{class:'meta'},'étape ',el('b',{},x.node_name||'?')),el('div',{style:'font-weight:600'},x.text),likesEditor(x.key,x.u,x.d,x.real_u,x.real_d,loadVotes),
    x.who.length?el('details',{},el('summary',{class:'meta'},'Qui a voté ('+x.who.length+')'),el('div',{style:'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px'},...x.who.map(mark))):''))})}

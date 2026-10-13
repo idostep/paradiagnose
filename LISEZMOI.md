@@ -24,6 +24,7 @@ Si la page est sur un autre domaine que l'API : lance avec `ALLOWED_ORIGIN=https
 Puis ouvrir `https://ton-domaine/admin` et se connecter. La session est un cookie (HttpOnly, Secure si le proxy envoie `X-Forwarded-Proto https`).
 
 ## Interface d'administration (`/admin`)
+**Période** (barre sous les onglets, valable pour Suggestions, Signalements et Votes) : choisir « du … au … » ou un raccourci (aujourd'hui, 7 jours, 30 jours, tout). Les listes et les boutons « Tout sélectionner » / « Supprimer la sélection » / « Marquer traitée » / « Approuver » n'agissent que sur ce qui est affiché ; dans Votes, « Supprimer ces votes » efface les votes de la période et du filtre affichés.
 - **Suggestions** : date/heure de chaque proposition ; filtres En attente / Approuvées / Refusées ; corriger le texte, choisir le groupe et « distinctif », Approuver, Refuser, Retirer, Remettre en attente, Supprimer (un par un, par sélection, ou « tout purger »).
 - **Signalements** : regroupés par critère (motifs, commentaires, likes/dislikes) ; marquer traité, masquer/réafficher le critère, supprimer.
 - **Votes** : vue « Par critère » (avec le détail de qui a liké ou disliké, initiales et date) et « Par personne » (tout ce qu’une personne a voté) ; fixer le nombre de 👍/👎 affichés d'un critère (les vrais votes restent dans la base, l'écart va dans `adjust`) ou remettre à zéro.

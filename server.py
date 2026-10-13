@@ -439,6 +439,12 @@ class H(BaseHTTPRequestHandler):
             if pth == '/api/admin/report':
                 rid = int(d.get('id', 0)); action = d.get('action')
                 keys = [d['key']] if d.get('key') else []
+                if isinstance(d.get('ids'), list) and action in ('handled', 'unhandled', 'delete'):   # action sur une sélection de signalements
+                    ids = [int(x) for x in d['ids'][:5000]]
+                    for i in ids:
+                        if action == 'delete': c.execute("DELETE FROM reports WHERE id=?", (i,))
+                        else: c.execute("UPDATE reports SET handled=?, handled_at=CASE WHEN ? THEN strftime('%Y-%m-%d %H:%M:%S','now') END WHERE id=?", (1 if action == 'handled' else 0, 1 if action == 'handled' else 0, i))
+                    return self.send(200, {'ok': True, 'n': len(ids)})
                 if action in ('handled', 'unhandled'):
                     flag = 1 if action == 'handled' else 0
                     if keys: c.execute("UPDATE reports SET handled=?, handled_at=CASE WHEN ? THEN strftime('%Y-%m-%d %H:%M:%S','now') END WHERE key=?", (flag, flag, keys[0]))
@@ -450,6 +456,11 @@ class H(BaseHTTPRequestHandler):
                     iid = int(d.get('item_id', 0)); c.execute("UPDATE items SET visible=? WHERE id=?", (1 if action == 'show_item' else 0, iid))
                 else: return self.send(400, {'error': 'action'})
                 return self.send(200, {'ok': True})
+            if pth == '/api/admin/votes' and isinstance(d.get('delete_votes'), list):   # supprimer des votes précis (voter+critère)
+                n = 0
+                for p in d['delete_votes'][:20000]:
+                    n += c.execute("DELETE FROM votes WHERE voter=? AND key=?", (str(p.get('vid', '')), str(p.get('key', '')))).rowcount
+                return self.send(200, {'ok': True, 'n': n})
             if pth == '/api/admin/votes':
                 key = str(d.get('key', ''))[:300]
                 if not key: return self.send(400, {'error': 'clé'})
