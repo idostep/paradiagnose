@@ -520,8 +520,8 @@ class H(BaseHTTPRequestHandler):
                            {'src': '/assets/icon-maskable-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'}]}
             return self.send(200, m, 'application/manifest+json; charset=utf-8', extra={'Cache-Control': 'public, max-age=86400'})
         if u.path in ('/favicon.ico', '/apple-touch-icon.png'):
-            p = os.path.join(HERE, 'assets', 'icon-32.png' if u.path == '/favicon.ico' else 'apple-touch-icon.png')
-            if os.path.isfile(p): return self.send(200, open(p, 'rb').read(), 'image/png', extra={'Cache-Control': 'public, max-age=604800'})
+            p = os.path.join(HERE, 'assets', 'favicon.ico' if u.path == '/favicon.ico' else 'apple-touch-icon.png')
+            if os.path.isfile(p): return self.send(200, open(p, 'rb').read(), 'image/x-icon' if u.path == '/favicon.ico' else 'image/png', extra={'Cache-Control': 'public, max-age=604800'})
         if u.path == '/admin':
             p = os.path.join(HERE, 'admin.html')
             if os.path.exists(p): return self.send(200, open(p, 'rb').read(), 'text/html; charset=utf-8')
