@@ -41,5 +41,5 @@ Chaque ligne garde son horodatage (UTC, base `cle.db`) : votes (`ts` = dernier c
 Fais un export de temps en temps (ou `cp cle.db sauvegarde.db` serveur arrêté).
 
 ## Règles actuelles (dans index.html)
-Drapeau « distinctif » à 3 likes · critère masqué quand likes − dislikes ≤ −3 · critère du poly sorti dès 1 like net.
+Drapeau « distinctif » dès que likes − dislikes ≥ 3 (il disparaît si le score retombe) · critère masqué quand likes − dislikes ≤ −3 · critère du poly sorti dès 1 like net.
 Un visiteur = un identifiant anonyme stocké dans son navigateur (1 vote par critère, like et dislike exclusifs).

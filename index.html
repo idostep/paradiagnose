@@ -298,7 +298,7 @@ footer{color:var(--ink2);font-size:13px;margin-top:28px}
 <body>
 <header class="top">
   <h1>Diagnose parasitaire</h1>
-  <p>UC 321, TP1 à TP5. À chaque étape, les critères ★ viennent des fiches officielles (revues par les enseignants) : cite-les en premier. Viennent ensuite ceux de l'arbre, puis ▪ ceux du poly d'entomologie. Les mots <span class="gl" style="cursor:default">soulignés en pointillés</span> ouvrent leur définition.</p>
+  <p>UC 321, TP1 à TP5. À chaque étape, les critères ★ viennent de la thèse : cite-les en premier. Viennent ensuite ceux d'un arbre, puis ▪ ceux du poly d'entomologie. Les mots <span class="gl" style="cursor:default">soulignés en pointillés</span> ouvrent leur définition.</p>
 </header>
 <nav class="tabs" aria-label="Sections"><div class="in" role="tablist">
   <button role="tab" data-v="step" aria-selected="true">Clé pas à pas</button>
@@ -674,7 +674,7 @@ function vgroupUl(wrap,g){const det=wrap.querySelector('details.polymoi');let ul
 function vhidUl(wrap){let d=wrap.querySelector('details.hidmoi');if(!d){d=document.createElement('details');d.className='polymoi hidmoi';d.innerHTML='<summary></summary><ul></ul>';const s=wrap.querySelector('.sug');if(s)wrap.insertBefore(d,s);else wrap.appendChild(d)}return d.querySelector('ul')}
 function vtidy(wrap){wrap.querySelectorAll('details.polymoi').forEach(d=>{const n=d.querySelectorAll('li').length;d.hidden=!n;const s=d.querySelector('summary');if(s)s.textContent='+ '+n+' critère'+(n>1?'s':'')+(d.classList.contains('hidmoi')?' masqué':' du poly')+(d.classList.contains('hidmoi')?(n>1?'s':''):'')});wrap.querySelectorAll('.gh').forEach(h=>{const u=h.nextElementSibling;const e=!(u&&u.querySelector('li'));h.style.display=e?'none':'';if(u&&u.tagName==='UL')u.style.display=e?'none':''});wrap.querySelectorAll('ul').forEach(u=>{if(!u.closest('details'))u.style.display=u.querySelector('li')?'':'none'})}
 const VTHR=3;
-function vflag(r){const likes=(+r.dataset.b||0)+cnt(r.dataset.k,'u');const on=likes>=VTHR;const orig=+r.dataset.b>0;if(!orig){r.classList.toggle('dist',on);if(r.closest('.tb'))r.classList.toggle('distb',on);const s=r.querySelector(':scope > .dg');if(on&&!s){const f=document.createElement('span');f.className='dg';f.title='Critère distinctif ('+VTHR+' likes)';f.textContent='⚑';const vb=r.querySelector('.vbs');r.insertBefore(f,vb)}else if(!on&&s)s.remove()}}
+function vflag(r){const net=(+r.dataset.b||0)+cnt(r.dataset.k,'u')-cnt(r.dataset.k,'d');const on=net>=VTHR;r.classList.toggle('dist',on);if(r.closest('.tb'))r.classList.toggle('distb',on);const bb=r.querySelector(':scope > b');if(bb&&(bb.classList.contains('dist')||bb.dataset.bd)){bb.dataset.bd=1;bb.classList.toggle('dist',on)}const s=r.querySelector('.dg');if(on&&!s){const f=document.createElement('span');f.className='dg';f.title='Critère distinctif (score ≥ '+VTHR+')';f.textContent='⚑';if(bb&&bb.dataset.bd)bb.appendChild(f);else r.insertBefore(f,r.querySelector('.vbs'))}else if(!on&&s)s.remove()}
 function vplace(r){if(!r.dataset.g)return;if(!r.__ul){r.__ul=r.parentNode;r.__wrap=r.closest('.tabl,.tb')}const wrap=r.__wrap;if(!wrap)return;const k=r.dataset.k,net=(+r.dataset.b||0)+cnt(k,'u')-cnt(k,'d'),dis=net<=-DTHR,lik=(cnt(k,'u')-cnt(k,'d'))>=1;let target;
  if(dis)target=vhidUl(wrap);else if(lik&&r.dataset.poly)target=vgroupUl(wrap,r.dataset.g);else target=r.__ul;
  if(r.parentNode!==target)target.appendChild(r);
