@@ -101,7 +101,7 @@ function renderSg(){const root=$('sg');root.innerHTML='';const S=DATA.suggestion
   const ck=el('input',{type:'checkbox',class:'sel',checked:SEL.has(s.id),on:{change:e=>{e.target.checked?SEL.add(s.id):SEL.delete(s.id);cnt.textContent=SEL.size?SEL.size+' sélectionnée(s)':''}}});
   const card=el('div',{class:'card '+(s.status==='approved'?'ok':s.status==='rejected'?'no':'new')});
   const act=(a,msg)=>async()=>{await post('/api/admin/suggestion',{id:s.id,action:a,text:t.value,grp:g.value,dist:d.checked});toast(msg);load()};
-  card.append(el('div',{class:'meta'},ck,' #'+s.id+' · étape ',el('b',{},s.node_name||s.node),' · proposée le ',el('b',{},when(s.ts)),' · visiteur '+s.voter+' · ',el('span',{class:'tag '+(s.status==='approved'?'g':s.status==='rejected'?'r':'y')},{pending:'en attente',approved:'visible',rejected:'refusée'}[s.status])),
+  card.append(el('div',{class:'meta'},ck,' #'+s.id+' · étape ',el('b',{},s.node_name||s.node),' · proposée le ',el('b',{},when(s.ts)),' · '+(s.initials?s.initials+' ':'')+'visiteur '+s.voter+' · ',el('span',{class:'tag '+(s.status==='approved'?'g':s.status==='rejected'?'r':'y')},{pending:'en attente',approved:'visible',rejected:'refusée'}[s.status])),
    el('div',{class:'row'},t),el('div',{class:'row'},'Groupe',g,el('label',{},d,' distinctif')));
   if(s.key)card.append(likesEditor(s.key,s.u,s.d,s.real_u,s.real_d,load));
   card.append(el('div',{class:'row'},s.status!=='approved'?el('button',{class:'b p',on:{click:act('approve','Approuvée : visible pour tous')}},'Approuver'):el('button',{class:'b',on:{click:act('approve','Mis à jour')}},'Enregistrer les modifs'),
@@ -120,7 +120,7 @@ function renderRp(){const root=$('rp');root.innerHTML='';const by={};DATA.report
   card.append(el('div',{class:'meta'},'étape ',el('b',{},r0.node_name||'?'),r0.visible===0?' · ':'',r0.visible===0?el('span',{class:'tag r'},'masqué'):''),
    el('div',{style:'font-weight:600;margin:2px 0 6px'},r0.text||key),
    el('div',{},Object.entries(counts).map(([k,n])=>el('span',{class:'tag y'},(REASONS[k]||k)+' × '+n))),
-   ...a.map(r=>el('div',{class:'cm'},el('span',{class:'meta'},when(r.ts)+' · '+(REASONS[r.reason]||r.reason)+' · visiteur '+r.voter+(r.handled?' · traité':'')),r.comment?el('div',{},r.comment):'')));
+   ...a.map(r=>el('div',{class:'cm'},el('span',{class:'meta'},when(r.ts)+' · '+(REASONS[r.reason]||r.reason)+' · '+(r.initials?r.initials+' ':'')+'visiteur '+r.voter+(r.handled?' · traité':'')),r.comment?el('div',{},r.comment):'')));
   if(r0.item_id)card.append(likesEditor('c'+r0.item_id,r0.u,r0.d,null,null,load));
   card.append(el('div',{class:'row'},open?el('button',{class:'b p',on:{click:act('handled',{},'Marqué traité')}},'Marquer traité'):el('button',{class:'b',on:{click:act('unhandled',{},'Rouvert')}},'Rouvrir'),
     r0.item_id&&r0.visible!==0?el('button',{class:'b d',on:{click:act('hide_item',{item_id:r0.item_id},'Critère masqué')}},'Masquer le critère'):'',

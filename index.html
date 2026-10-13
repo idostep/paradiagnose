@@ -700,6 +700,25 @@ document.addEventListener('click',e=>{const b=e.target.closest('.vb.v-flag');if(
 if(!m.hidden&&(e.target===m||e.target.closest('.rpx')))close()},true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!m.hidden)close()});
 m.addEventListener('submit',e=>{e.preventDefault();try{const k='cle-reports',a=JSON.parse(localStorage.getItem(k)||'[]');a.push({key:cur,reason:m.querySelector('input:checked').value,comment:m.querySelector('textarea').value.trim(),date:Date.now()});localStorage.setItem(k,JSON.stringify(a))}catch(_){}api('/api/report',{voter:VID,key:cur,reason:m.querySelector('input:checked').value,comment:m.querySelector('textarea').value.trim()});m.querySelector('.rpmsg').textContent='Merci, signalé !';setTimeout(close,900)})})();
+
+/* ---------- initiales du visiteur (demandées à la première visite, gardées en cookie) ---------- */
+(function(){
+ const CK='cle-ini';
+ const rd=()=>{let v='';try{const m=document.cookie.match(/(?:^|;\s*)cle-ini=([^;]*)/);if(m)v=decodeURIComponent(m[1])}catch(_){}if(!v){try{v=localStorage.getItem(CK)||''}catch(_){}}return v};
+ const wr=v=>{try{document.cookie=CK+'='+encodeURIComponent(v)+'; Max-Age=31536000; Path=/; SameSite=Lax'+(location.protocol==='https:'?'; Secure':'')}catch(_){}try{localStorage.setItem(CK,v)}catch(_){}};
+ const send=v=>{if(API!==null)api('/api/profile',{voter:VID,initials:v})};
+ const m=document.createElement('div');m.className='rpm';m.hidden=true;m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');
+ m.innerHTML='<form class="rpb"><h3>Tes initiales</h3><p style="margin:0 0 8px;font-size:14.5px">Pour savoir qui vote, signale ou propose un critère. Elles sont gardées sur cet appareil (cookie) et tu ne les retapes pas.</p><input class="inim" type="text" maxlength="8" autocomplete="off" autocapitalize="characters" placeholder="ex. AB" style="width:100%;box-sizing:border-box;font:inherit;font-size:16px;text-transform:uppercase;padding:8px 10px;border:1px solid rgba(128,128,128,.4);border-radius:8px;background:transparent;color:inherit"><div class="rpr"><span class="rpmsg"></span><button type="submit" class="rps" style="background:var(--green);border-color:var(--green)">Valider</button></div></form>';
+ document.body.appendChild(m);
+ const inp=m.querySelector('.inim'),msg=m.querySelector('.rpmsg');
+ function ask(){inp.value=rd();msg.textContent='';m.hidden=false;setTimeout(()=>inp.focus(),50)}
+ m.addEventListener('submit',e=>{e.preventDefault();const v=inp.value.trim().toUpperCase();if(!/^[A-ZÀ-ÖØ-Þ][A-ZÀ-ÖØ-Þ.\- ]{0,7}$/.test(v)){msg.textContent='Lettres uniquement (8 max).';return}wr(v);send(v);m.hidden=true;paint()});
+ const link=document.createElement('button');link.type='button';link.className='sugb';link.style.cssText='display:block;margin:8px auto 0';
+ const ft=document.querySelector('footer');if(ft)ft.appendChild(link);
+ function paint(){const v=rd();link.textContent=v?'Initiales : '+v+' (modifier)':'Indiquer mes initiales'}
+ link.onclick=ask;paint();
+ const v=rd();if(v){wr(v);send(v)}else ask();
+})();
 </script>
 <script>fetch('/api/content').then(r=>{if(!r.ok)throw 0;return r.json()}).then(c=>{window.__C=c;const s=document.createElement('script');s.textContent=document.getElementById('app').textContent;document.body.appendChild(s)}).catch(()=>{document.body.insertAdjacentHTML('afterbegin','<p style="padding:16px">Impossible de charger le contenu (serveur indisponible).</p>')})</script>
 </body>

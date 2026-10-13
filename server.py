@@ -73,6 +73,7 @@ def init():
                 c.execute(f"UPDATE {tbl} SET created_at=strftime('%Y-%m-%d %H:%M:%S', ts, 'unixepoch')")
             except sqlite3.OperationalError: pass
         # corrections manuelles des totaux de likes/dislikes (ajoutées aux vrais votes)
+        c.execute("CREATE TABLE IF NOT EXISTS voters(voter TEXT PRIMARY KEY, initials TEXT, ts INTEGER)")
         c.execute("CREATE TABLE IF NOT EXISTS adjust(key TEXT PRIMARY KEY, u INTEGER DEFAULT 0, d INTEGER DEFAULT 0)")
         c.executescript("""
         CREATE TABLE IF NOT EXISTS admins(username TEXT PRIMARY KEY, salt TEXT, hash TEXT, created INTEGER);
@@ -157,7 +158,7 @@ def login_blocked(ip):
     tot = sum(1 for v in LOGIN_HITS.values() for t in v if now - t < 300)
     return len(h) >= 8 or tot >= 40      # par IP, et au total (IP falsifiées)
 
-SYNC_TABLES = ['meta', 'nodes', 'node_kids', 'items', 'node_images', 'glossary', 'votes', 'suggestions', 'reports', 'adjust']
+SYNC_TABLES = ['meta', 'nodes', 'node_kids', 'items', 'node_images', 'glossary', 'votes', 'suggestions', 'reports', 'adjust', 'voters']
 
 def export_db_bytes():
     """copie cohérente de la base, SANS les comptes admin ni les sessions"""
@@ -278,6 +279,12 @@ def valid_key(c, key):
         return c.execute("SELECT 1 FROM items WHERE node_id=? AND text=?", (nid, text)).fetchone() is not None
     return False
 
+def ini(c, voter):
+    r = c.execute("SELECT initials FROM voters WHERE voter=?", (voter,)).fetchone()
+    return r['initials'] if r else ''
+
+INI_RE = re.compile(r"^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ.\- ]{0,7}$")
+
 def clean_text(t, n):
     t = re.sub(r'[\x00-\x08\x0b-\x1f\x7f]', '', str(t or ''))      # caractères de contrôle
     return t.strip()[:n]
@@ -360,7 +367,7 @@ class H(BaseHTTPRequestHandler):
                 sug = []
                 for r in c.execute("SELECT * FROM suggestions ORDER BY id DESC LIMIT 1000"):
                     t = dict(r); nm = c.execute("SELECT t FROM nodes WHERE id=?", (r['node'],)).fetchone()
-                    t['node_name'] = nm['t'] if nm else r['node']; t['voter'] = (r['voter'] or '')[:6]
+                    t['node_name'] = nm['t'] if nm else r['node']; t['voter'] = (r['voter'] or '')[:6]; t['initials'] = ini(c, r['voter'])
                     t['status'] = t.get('status') or ('approved' if t.get('approved') else 'pending')
                     if t.get('item_id'):
                         k = 'c%d' % t['item_id']; tot = counts_for(c, k).get(k, {'u': 0, 'd': 0}); real = real_counts(c, k)
@@ -369,7 +376,7 @@ class H(BaseHTTPRequestHandler):
                 rep = []
                 for r in c.execute("SELECT * FROM reports ORDER BY id DESC LIMIT 2000"):
                     t = dict(r); text, nid, nname, iid = resolve_key(c, r['key'])
-                    t.update(text=text, node=nid, node_name=nname, item_id=iid, voter=(r['voter'] or '')[:6])
+                    t.update(text=text, node=nid, node_name=nname, item_id=iid, voter=(r['voter'] or '')[:6], initials=ini(c, r['voter']))
                     if iid:
                         it = c.execute("SELECT visible FROM items WHERE id=?", (iid,)).fetchone(); t['visible'] = it['visible'] if it else None
                         k = 'c%d' % iid; tot = counts_for(c, k).get(k, {'u': 0, 'd': 0}); t['u'], t['d'] = tot['u'], tot['d']
@@ -554,6 +561,11 @@ class H(BaseHTTPRequestHandler):
                 if vote is None: c.execute("DELETE FROM votes WHERE voter=? AND key=?", (voter, key))
                 else: c.execute("INSERT INTO votes(voter,key,vote,ts) VALUES(?,?,?,?) ON CONFLICT(voter,key) DO UPDATE SET vote=excluded.vote, ts=excluded.ts", (voter, key, vote, now))
                 return self.send(200, {'counts': counts_for(c, key) or {key: {'u': 0, 'd': 0}}})
+            if p == '/api/profile':
+                v = clean_text(d.get('initials'), 8)
+                if not INI_RE.match(v): return self.send(400, {'error': 'initiales invalides'})
+                c.execute("INSERT INTO voters(voter,initials,ts) VALUES(?,?,?) ON CONFLICT(voter) DO UPDATE SET initials=excluded.initials, ts=excluded.ts", (voter, v.upper(), now))
+                return self.send(200, {'ok': True})
             if p == '/api/suggest':
                 text = clean_text(d.get('text'), 400)
                 if not text: return self.send(400, {'error': 'vide'})
