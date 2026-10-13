@@ -21,8 +21,8 @@ Si la page est sur un autre domaine que l'API : lance avec `ALLOWED_ORIGIN=https
 `PORT` (8765) · `HOST` (127.0.0.1) · `DB` (cle.db) · `ALLOWED_ORIGIN` (*) · `STATIC` (index.html)
 
 ## Compte administrateur (login + mot de passe)
-    python3 server.py adduser ido      # crée le compte (mot de passe demandé, jamais affiché)
-    python3 server.py passwd ido       # change le mot de passe
+    python3 server.py adduser ido      # crée un compte (refuse si le nom existe déjà ; mot de passe demandé, jamais affiché)
+    python3 server.py passwd ido       # change le mot de passe d'un compte existant
     python3 server.py users            # liste · deluser NOM pour supprimer
 Puis ouvrir `https://ton-domaine/admin` et se connecter. La session est un cookie (HttpOnly, Secure si le proxy envoie `X-Forwarded-Proto https`).
 

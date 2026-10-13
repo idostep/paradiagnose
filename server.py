@@ -623,10 +623,13 @@ def cli(args):
         user = args[1].strip()
         if args[0] == 'deluser':
             c.execute("DELETE FROM admins WHERE username=?", (user,)); c.execute("DELETE FROM sessions WHERE username=?", (user,)); print('supprimé :', user); return
+        exists = c.execute("SELECT 1 FROM admins WHERE username=?", (user,)).fetchone() is not None
+        if args[0] == 'adduser' and exists: sys.exit(f"« {user} » existe déjà : rien n'a été modifié. Pour changer son mot de passe : python3 server.py passwd {user} (ou choisis un autre nom).")
+        if args[0] == 'passwd' and not exists: sys.exit(f"« {user} » n'existe pas. Pour le créer : python3 server.py adduser {user}")
         pw = getpass.getpass('Mot de passe (10 caractères minimum) : ')
         if len(pw) < 10: sys.exit('Trop court.')
         if pw != getpass.getpass('Confirmer : '): sys.exit('Les deux mots de passe diffèrent.')
-        set_password(c, user, pw); print('OK :', user)
+        set_password(c, user, pw); print('créé :' if args[0] == 'adduser' else 'mot de passe changé :', user)
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and sys.argv[1] in ('adduser', 'passwd', 'deluser', 'users'):
