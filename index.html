@@ -326,7 +326,7 @@ footer{color:var(--ink2);font-size:13px;margin-top:28px}
 <header class="top">
   <h1>Diagnose parasitaire</h1>
   <p>UC 321, TP1 à TP5. À chaque étape, les critères sont classés selon leur source :</p>
-  <ul class="srcl"><li><b>★</b> la thèse : à citer en premier</li><li><b>sans marque</b> : pas de source</li><li><b>▪</b> l'arbre original</li></ul>
+  <ul class="srcl"><li><b>★</b> la thèse : généralement de confiance</li><li><b>sans marque</b> : pas de source</li><li><b>▪</b> l'arbre original</li></ul>
   <p>Les mots <span class="gl" style="cursor:default">soulignés en pointillés</span> ouvrent leur définition.</p>
 </header>
 <nav class="tabs" aria-label="Sections"><div class="in" role="tablist">
@@ -740,7 +740,7 @@ m.addEventListener('submit',e=>{e.preventDefault();const nt=m.querySelector('.rp
  const send=v=>{if(API!==null)api('/api/profile',{voter:VID,initials:v})};
  const FLAG='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M5 21V4M5 4h13l-2 4 2 4H5"/></svg>';
  const P=[
-  ['★','Les étoiles','<ul class="hll"><li><b>★</b> : le critère est décrit dans <b>la thèse</b>. Cite-le en premier.</li><li><b>Sans marque</b> : pas de source.</li><li><b>▪</b> : le critère vient de <b>l’arbre original</b>.</li></ul>'],
+  ['★','Les étoiles','<ul class="hll"><li><b>★</b> : le critère est décrit dans <b>la thèse</b>. Il est généralement de confiance.</li><li><b>Sans marque</b> : pas de source.</li><li><b>▪</b> : le critère vient de <b>l’arbre original</b>.</li></ul>'],
   ['👍 👎','Like / dislike','<ul class="hll"><li><b>👍</b> : le critère est juste et utile.</li><li><b>👎</b> : il ne l’est pas.</li><li>Un seul vote par critère : change-le ou retire-le en recliquant.</li><li>Le chiffre affiché est <b>likes − dislikes</b> ; les critères sont triés par ce score.</li></ul>'],
   ['<span class="hdg">⚑</span>','Critères distinctifs','<ul class="hll"><li>Un critère <b>distinctif</b> permet de séparer ce taxon d’un autre.</li><li>À un score de <b>3</b> : <b>drapeau jaune</b> et surlignage. Il les perd si le score retombe.</li><li>À <b>−3</b> : le critère est <b>masqué</b> (liste dépliable, rien n’est supprimé).</li><li>Un critère ▪ sort de sa liste dès qu’il a un like de plus que de dislikes.</li></ul>'],
   [FLAG,'Signaler','<ul class="hll"><li>Le petit <b>drapeau gris</b> à droite d’un critère sert à le signaler.</li><li>Motifs : information fausse, mal classé, doublon…</li><li>Tu peux aussi <b>proposer une correction du texte</b> : un administrateur la confirme avant que ça change.</li></ul>'],
