@@ -157,6 +157,7 @@ b.dist{background:#FFF1B8;border-radius:4px;padding:0 3px;color:#3a2c00}
 .rpb .rpc{font-size:14px;padding:6px 8px;border-radius:8px;background:rgba(128,128,128,.14);margin:6px 0 10px}
 .rpb label{display:block;margin:4px 0;font-size:14.5px;cursor:pointer}
 .rpb textarea{width:100%;box-sizing:border-box;font:inherit;font-size:14px;padding:6px 8px;border:1px solid rgba(128,128,128,.4);border-radius:8px;background:transparent;color:inherit;margin-top:6px}
+.srcl{margin:2px 0 8px;padding-left:20px}.srcl li{margin:2px 0}
 .rpb .rpe{margin-top:8px}.rpb .rpt{margin-top:4px}
 .rpb .rpr{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;align-items:center}
 .rpb .rpr button{font:inherit;font-size:14px;padding:6px 14px;border-radius:8px;border:1px solid rgba(128,128,128,.4);background:transparent;color:inherit;cursor:pointer}
@@ -324,7 +325,9 @@ footer{color:var(--ink2);font-size:13px;margin-top:28px}
 <body>
 <header class="top">
   <h1>Diagnose parasitaire</h1>
-  <p>UC 321, TP1 à TP5. À chaque étape, les critères ★ viennent de la thèse : cite-les en premier. Viennent ensuite ceux d'un arbre, puis ▪ ceux de l'arbre original. Les mots <span class="gl" style="cursor:default">soulignés en pointillés</span> ouvrent leur définition.</p>
+  <p>UC 321, TP1 à TP5. À chaque étape, les critères sont classés selon leur source :</p>
+  <ul class="srcl"><li><b>★</b> la thèse : à citer en premier</li><li><b>sans marque</b> : pas de source</li><li><b>▪</b> l'arbre original</li></ul>
+  <p>Les mots <span class="gl" style="cursor:default">soulignés en pointillés</span> ouvrent leur définition.</p>
 </header>
 <nav class="tabs" aria-label="Sections"><div class="in" role="tablist">
   <button role="tab" data-v="step" aria-selected="true">Clé pas à pas</button>
@@ -439,7 +442,7 @@ function evAncestor(steps){ return steps.slice(0,-1).reverse().find(x=>N[x].ev);
 function blocks(id, withNotes=true){
   const n=N[id]; let h='';
   if(withNotes && n.note) h += n.note.map(x=>`${noteHTML(x)}`).join('');
-  if(n.tab && n.tab.length) h += `<div class="blk tabl"><div class="lbl">Critères${n.tab.some(isF)?' <span class="fleg">★ thèse</span>':''}${n.tab.some(x=>!isF(x)&&!isW(x)&&!isP(x))?' <span class="aleg">• arbre</span>':''}${n.tab.some(isP)?' <span class="pleg">▪ poly</span>':''}${n.tab.some(x=>!isP(x)&&critDist(id,x))?` <span class="dleg" title="${esc(distTitle(id))}">⚑ distinctif</span>`:''}</div>${tabGroups(id,n.tab)}${SUG(id)}</div>`;
+  if(n.tab && n.tab.length) h += `<div class="blk tabl"><div class="lbl">Critères${n.tab.some(isF)?' <span class="fleg">★ thèse</span>':''}${n.tab.some(x=>!isF(x)&&!isW(x)&&!isP(x))?' <span class="aleg">• sans source</span>':''}${n.tab.some(isP)?' <span class="pleg">▪ arbre original</span>':''}${n.tab.some(x=>!isP(x)&&critDist(id,x))?` <span class="dleg" title="${esc(distTitle(id))}">⚑ distinctif</span>`:''}</div>${tabGroups(id,n.tab)}${SUG(id)}</div>`;
   else if(id!==ROOT) h += `<p class="empty">Pas de critère écrit à cette étape.</p>`;
   const mo0=(n.moi||[]).filter(x=>!isP(x)), mo1=(n.moi||[]).filter(isP);
   if(mo0.length) h += `<div class="blk moi"><div class="lbl">Compléments</div><ul>${mo0.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
@@ -737,16 +740,16 @@ m.addEventListener('submit',e=>{e.preventDefault();const nt=m.querySelector('.rp
  const send=v=>{if(API!==null)api('/api/profile',{voter:VID,initials:v})};
  const FLAG='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M5 21V4M5 4h13l-2 4 2 4H5"/></svg>';
  const P=[
-  ['★','Les étoiles','<p>Un critère marqué <b>★</b> est décrit dans <b>la thèse</b> : cite-le en premier.</p><p>Un <b>▪</b> vient de <b>l’arbre original</b>. Sans marque, le critère vient d’un arbre.</p>'],
-  ['👍 👎','Like / dislike','<p><b>👍</b> si le critère est juste et utile, <b>👎</b> s’il ne l’est pas.</p><p>Un seul vote par critère : tu peux le changer ou le retirer en recliquant.</p><p>Le chiffre affiché est <b>likes − dislikes</b> ; les critères sont triés par ce score.</p>'],
-  ['<span class="hdg">⚑</span>','Critères distinctifs','<p>Un critère <b>distinctif</b> permet de séparer ce taxon d’un autre. Il reçoit un <b>drapeau jaune</b> et un surlignage quand son score atteint <b>3</b>, et le perd si le score retombe.</p><p>À <b>−3</b>, un critère est <b>masqué</b> (dans une liste dépliable : rien n’est supprimé). Un critère de l’arbre original (▪) sort de sa liste dès qu’il a un like de plus que de dislikes.</p>'],
-  [FLAG,'Signaler','<p>Le petit <b>drapeau gris</b> à droite d’un critère sert à le signaler : information fausse, mal classé, doublon…</p><p>Tu peux aussi <b>proposer une correction du texte</b> : un administrateur la confirme avant que ça change.</p>'],
-  ['＋','Proposer un critère','<p>Il manque un critère ? Clique sur <b>« + Suggérer un critère »</b> sous les listes.</p><p>Il apparaît pour tous dès qu’un administrateur l’a validé.</p>']];
+  ['★','Les étoiles','<ul class="hll"><li><b>★</b> : le critère est décrit dans <b>la thèse</b>. Cite-le en premier.</li><li><b>Sans marque</b> : pas de source.</li><li><b>▪</b> : le critère vient de <b>l’arbre original</b>.</li></ul>'],
+  ['👍 👎','Like / dislike','<ul class="hll"><li><b>👍</b> : le critère est juste et utile.</li><li><b>👎</b> : il ne l’est pas.</li><li>Un seul vote par critère : change-le ou retire-le en recliquant.</li><li>Le chiffre affiché est <b>likes − dislikes</b> ; les critères sont triés par ce score.</li></ul>'],
+  ['<span class="hdg">⚑</span>','Critères distinctifs','<ul class="hll"><li>Un critère <b>distinctif</b> permet de séparer ce taxon d’un autre.</li><li>À un score de <b>3</b> : <b>drapeau jaune</b> et surlignage. Il les perd si le score retombe.</li><li>À <b>−3</b> : le critère est <b>masqué</b> (liste dépliable, rien n’est supprimé).</li><li>Un critère ▪ sort de sa liste dès qu’il a un like de plus que de dislikes.</li></ul>'],
+  [FLAG,'Signaler','<ul class="hll"><li>Le petit <b>drapeau gris</b> à droite d’un critère sert à le signaler.</li><li>Motifs : information fausse, mal classé, doublon…</li><li>Tu peux aussi <b>proposer une correction du texte</b> : un administrateur la confirme avant que ça change.</li></ul>'],
+  ['＋','Proposer un critère','<ul class="hll"><li>Il manque un critère ? Clique sur <b>« + Suggérer un critère »</b> sous les listes.</li><li>Il apparaît pour tous dès qu’un administrateur l’a validé.</li></ul>']];
  const m=document.createElement('div');m.className='rpm';m.hidden=true;m.setAttribute('role','dialog');m.setAttribute('aria-modal','true');
  const pages=P.map((p,i)=>'<div class="hp" data-p="'+i+'" hidden><div class="hbig">'+p[0]+'</div><h3>'+p[1]+'</h3>'+p[2]+'</div>').join('')+
   '<div class="hp" data-p="'+P.length+'" hidden><div class="hbig">👋</div><h3>Tes initiales</h3><p>Pour savoir qui vote, signale ou propose un critère. Elles sont gardées sur cet appareil.</p><input class="inim" type="text" maxlength="8" autocomplete="off" autocapitalize="characters" placeholder="ex. AB" style="width:100%;box-sizing:border-box;font:inherit;font-size:16px;text-transform:uppercase;padding:8px 10px;border:1px solid rgba(128,128,128,.4);border-radius:8px;background:transparent;color:inherit"><div class="rpmsg"></div></div>';
  m.innerHTML='<form class="rpb hlp"><div class="hbody">'+pages+'</div><div class="hdots"></div><div class="rpr"><button type="button" class="rpx hskip">Passer</button><span style="flex:1"></span><button type="button" class="rpx hprev">Précédent</button><button type="button" class="rps hnext" style="background:var(--green);border-color:var(--green)">Suivant</button><button type="submit" class="rps hgo" style="background:var(--green);border-color:var(--green)" hidden>Commencer</button></div></form>';
- const st=document.createElement('style');st.textContent='.rpb.hlp{max-width:440px;min-height:340px;display:flex;flex-direction:column}.hlp .hbody{flex:1}.hlp .hbig{font-size:38px;line-height:1.1;margin:6px 0 4px;color:var(--aca);font-weight:800}.hlp h3{font-size:21px;margin:0 0 8px}.hlp p{margin:6px 0;font-size:15.5px;line-height:1.45}.hlp .hdg{background:#FFF1B8;color:#3a2c00;border-radius:6px;padding:0 8px}.hlp .hdots{display:flex;gap:6px;justify-content:center;margin:12px 0 2px}.hlp .hdots i{width:8px;height:8px;border-radius:50%;background:rgba(128,128,128,.35)}.hlp .hdots i.on{background:var(--green);width:20px;border-radius:4px}.hlp .rpmsg{margin-top:6px;color:#b3261e;font-size:13px}.hlp [hidden]{display:none!important}';document.head.appendChild(st);
+ const st=document.createElement('style');st.textContent='.rpb.hlp{max-width:440px;min-height:340px;display:flex;flex-direction:column}.hlp .hbody{flex:1}.hlp .hbig{font-size:38px;line-height:1.1;margin:6px 0 4px;color:var(--aca);font-weight:800}.hlp h3{font-size:21px;margin:0 0 8px}.hlp .hll{margin:6px 0;padding-left:20px;font-size:15.5px;line-height:1.45}.hlp .hll li{margin:6px 0}.hlp p{margin:6px 0;font-size:15.5px;line-height:1.45}.hlp .hdg{background:#FFF1B8;color:#3a2c00;border-radius:6px;padding:0 8px}.hlp .hdots{display:flex;gap:6px;justify-content:center;margin:12px 0 2px}.hlp .hdots i{width:8px;height:8px;border-radius:50%;background:rgba(128,128,128,.35)}.hlp .hdots i.on{background:var(--green);width:20px;border-radius:4px}.hlp .rpmsg{margin-top:6px;color:#b3261e;font-size:13px}.hlp [hidden]{display:none!important}';document.head.appendChild(st);
  document.body.appendChild(m);
  const $$=s=>m.querySelector(s),inp=$$('.inim'),msg=$$('.rpmsg'),N=P.length;let cur=0;
  const dots=$$('.hdots');dots.innerHTML=Array.from({length:N+1},()=>'<i></i>').join('');
