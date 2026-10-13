@@ -33,6 +33,9 @@ Puis ouvrir `https://ton-domaine/admin` et se connecter. La session est un cooki
 ## Initiales des visiteurs
 À la première visite la page demande des initiales (2–8 lettres), gardées dans un cookie d’un an (et localStorage). Elles sont enregistrées dans la table `voters` et affichées dans l’admin à côté des suggestions et signalements ; un lien en bas de page permet de les modifier.
 
+## Dates enregistrées
+Chaque ligne garde son horodatage (UTC, base `cle.db`) : votes (`ts` = dernier changement, `created_at` = 1er vote), suggestions et signalements (`ts`, `created_at`), initiales (`voters.created_at`), et quand l'admin a traité : `suggestions.decided_at` (approuvée/refusée), `reports.handled_at`. L'admin les affiche en heure locale.
+
 ## Sauvegarde
 Fais un export de temps en temps (ou `cp cle.db sauvegarde.db` serveur arrêté).
 

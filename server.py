@@ -72,6 +72,14 @@ def init():
                 c.execute(f"ALTER TABLE {tbl} ADD COLUMN created_at TEXT")
                 c.execute(f"UPDATE {tbl} SET created_at=strftime('%Y-%m-%d %H:%M:%S', ts, 'unixepoch')")
             except sqlite3.OperationalError: pass
+        for tbl, col, src in (('votes', 'created_at', 'ts'), ('voters', 'created_at', 'ts')):   # date lisible (UTC) du 1er vote / de l'inscription des initiales
+            try:
+                c.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT")
+                c.execute(f"UPDATE {tbl} SET {col}=strftime('%Y-%m-%d %H:%M:%S', {src}, 'unixepoch')")
+            except sqlite3.OperationalError: pass
+        for tbl, col in (('suggestions', 'decided_at'), ('reports', 'handled_at')):   # quand l'admin a traité
+            try: c.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT")
+            except sqlite3.OperationalError: pass
         # corrections manuelles des totaux de likes/dislikes (ajoutées aux vrais votes)
         c.execute("CREATE TABLE IF NOT EXISTS voters(voter TEXT PRIMARY KEY, initials TEXT, ts INTEGER)")
         c.execute("CREATE TABLE IF NOT EXISTS adjust(key TEXT PRIMARY KEY, u INTEGER DEFAULT 0, d INTEGER DEFAULT 0)")
@@ -358,8 +366,8 @@ class H(BaseHTTPRequestHandler):
             if path == '/api/admin/votes':
                 keys = {r['key'] for r in c.execute("SELECT DISTINCT key FROM votes UNION SELECT key FROM adjust")}
                 who = {}
-                for r in c.execute("SELECT v.key, v.voter, v.vote, v.ts, COALESCE(p.initials,'') AS ini FROM votes v LEFT JOIN voters p ON p.voter=v.voter ORDER BY v.ts DESC"):
-                    who.setdefault(r['key'], []).append({'ini': r['ini'], 'voter': r['voter'][:6], 'vid': r['voter'], 'vote': r['vote'], 'ts': r['ts']})
+                for r in c.execute("SELECT v.key, v.voter, v.vote, v.ts, v.created_at, COALESCE(p.initials,'') AS ini FROM votes v LEFT JOIN voters p ON p.voter=v.voter ORDER BY v.ts DESC"):
+                    who.setdefault(r['key'], []).append({'ini': r['ini'], 'voter': r['voter'][:6], 'vid': r['voter'], 'vote': r['vote'], 'ts': r['ts'], 'created_at': r['created_at']})
                 out = []
                 for k in keys:
                     text, nid, nname, iid = resolve_key(c, k); tot = counts_for(c, k).get(k, {'u': 0, 'd': 0}); real = real_counts(c, k)
@@ -398,7 +406,7 @@ class H(BaseHTTPRequestHandler):
                         if not r or action not in ('delete', 'reject', 'reset'): continue
                         if r['item_id']: c.execute("UPDATE items SET visible=0 WHERE id=?", (r['item_id'],))
                         if action == 'delete': c.execute("DELETE FROM suggestions WHERE id=?", (r['id'],))
-                        else: c.execute("UPDATE suggestions SET status=?, approved=0 WHERE id=?", ('rejected' if action == 'reject' else 'pending', r['id']))
+                        else: c.execute("UPDATE suggestions SET status=?, approved=0, decided_at=CASE WHEN ?='reject' THEN strftime('%Y-%m-%d %H:%M:%S','now') END WHERE id=?", ('rejected' if action == 'reject' else 'pending', action, r['id']))
                         n += 1
                     return self.send(200, {'ok': True, 'n': n})
                 sid = int(d.get('id', 0)); r = c.execute("SELECT * FROM suggestions WHERE id=?", (sid,)).fetchone()
@@ -411,10 +419,10 @@ class H(BaseHTTPRequestHandler):
                         pos = c.execute("SELECT COALESCE(MAX(pos),0)+1 FROM items WHERE node_id=? AND kind='tab'", (r['node'],)).fetchone()[0]
                         cur = c.execute("INSERT INTO items(node_id,kind,pos,text,grp,dist,visible,source) VALUES(?,?,?,?,?,?,1,'visiteur')", (r['node'], 'tab', pos, text, grp, dist))
                         c.execute("UPDATE suggestions SET item_id=? WHERE id=?", (cur.lastrowid, sid))
-                    c.execute("UPDATE suggestions SET status='approved', approved=1 WHERE id=?", (sid,))
+                    c.execute("UPDATE suggestions SET status='approved', approved=1, decided_at=strftime('%Y-%m-%d %H:%M:%S','now') WHERE id=?", (sid,))
                 elif action in ('reject', 'reset'):
                     if r['item_id']: c.execute("UPDATE items SET visible=0 WHERE id=?", (r['item_id'],))
-                    c.execute("UPDATE suggestions SET status=?, approved=0 WHERE id=?", ('rejected' if action == 'reject' else 'pending', sid))
+                    c.execute("UPDATE suggestions SET status=?, approved=0, decided_at=CASE WHEN ?='reject' THEN strftime('%Y-%m-%d %H:%M:%S','now') END WHERE id=?", ('rejected' if action == 'reject' else 'pending', action, sid))
                 elif action == 'delete':
                     if r['item_id']: c.execute("UPDATE items SET visible=0 WHERE id=?", (r['item_id'],))
                     c.execute("DELETE FROM suggestions WHERE id=?", (sid,))
@@ -433,8 +441,8 @@ class H(BaseHTTPRequestHandler):
                 keys = [d['key']] if d.get('key') else []
                 if action in ('handled', 'unhandled'):
                     flag = 1 if action == 'handled' else 0
-                    if keys: c.execute("UPDATE reports SET handled=? WHERE key=?", (flag, keys[0]))
-                    else: c.execute("UPDATE reports SET handled=? WHERE id=?", (flag, rid))
+                    if keys: c.execute("UPDATE reports SET handled=?, handled_at=CASE WHEN ? THEN strftime('%Y-%m-%d %H:%M:%S','now') END WHERE key=?", (flag, flag, keys[0]))
+                    else: c.execute("UPDATE reports SET handled=?, handled_at=CASE WHEN ? THEN strftime('%Y-%m-%d %H:%M:%S','now') END WHERE id=?", (flag, flag, rid))
                 elif action == 'delete':
                     if keys: c.execute("DELETE FROM reports WHERE key=?", (keys[0],))
                     else: c.execute("DELETE FROM reports WHERE id=?", (rid,))
@@ -562,12 +570,12 @@ class H(BaseHTTPRequestHandler):
                 if not key or vote not in ('u', 'd', None) or not valid_key(c, key): return self.send(400, {'error': 'paramètres'})
                 if c.execute("SELECT COUNT(*) FROM votes WHERE voter=?", (voter,)).fetchone()[0] > 5000: return self.send(429, {'error': 'limite atteinte'})
                 if vote is None: c.execute("DELETE FROM votes WHERE voter=? AND key=?", (voter, key))
-                else: c.execute("INSERT INTO votes(voter,key,vote,ts) VALUES(?,?,?,?) ON CONFLICT(voter,key) DO UPDATE SET vote=excluded.vote, ts=excluded.ts", (voter, key, vote, now))
+                else: c.execute("INSERT INTO votes(voter,key,vote,ts,created_at) VALUES(?,?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch')) ON CONFLICT(voter,key) DO UPDATE SET vote=excluded.vote, ts=excluded.ts", (voter, key, vote, now, now))
                 return self.send(200, {'counts': counts_for(c, key) or {key: {'u': 0, 'd': 0}}})
             if p == '/api/profile':
                 v = clean_text(d.get('initials'), 8)
                 if not INI_RE.match(v): return self.send(400, {'error': 'initiales invalides'})
-                c.execute("INSERT INTO voters(voter,initials,ts) VALUES(?,?,?) ON CONFLICT(voter) DO UPDATE SET initials=excluded.initials, ts=excluded.ts", (voter, v.upper(), now))
+                c.execute("INSERT INTO voters(voter,initials,ts,created_at) VALUES(?,?,?,strftime('%Y-%m-%d %H:%M:%S',?,'unixepoch')) ON CONFLICT(voter) DO UPDATE SET initials=excluded.initials, ts=excluded.ts", (voter, v.upper(), now, now))
                 return self.send(200, {'ok': True})
             if p == '/api/suggest':
                 text = clean_text(d.get('text'), 400)
