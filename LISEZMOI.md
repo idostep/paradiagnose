@@ -4,6 +4,9 @@ Tout le contenu (arbre, critères, notes, confusions, glossaire, légendes d'ima
 
 Fichiers : `server.py` (serveur, Python 3, aucune dépendance), `content.json` (contenu de départ), `index.html` (la page, légère, réglée pour parler à `/api` sur le même domaine), `assets/` (219 images, utilisées par la page). Copier le dossier `assets` en entier : `scp -r assets idostep@…:/var/www/paradiagnose/`.
 
+## Aperçu des liens et icône
+La page contient les balises Open Graph / Twitter (aperçu dans WhatsApp, iMessage, Slack…) avec l'image `assets/og.png` (1200×630), et une icône (`assets/icon-*.png`, `apple-touch-icon.png`) + `/manifest.webmanifest` pour « Ajouter à l'écran d'accueil ». Les adresses sont écrites avec `https://paradiagnose.banquise.org` : si le domaine change, modifier les 3 lignes `og:url`, `og:image`, `twitter:image` de `index.html`. Copier tout le dossier `assets/`. Pour rafraîchir un aperçu déjà mis en cache : WhatsApp garde l'ancien un moment ; ajouter `?v=2` au lien suffit.
+
 ## Lancer
     python3 server.py            # écoute sur 127.0.0.1:8765, base SQLite cle.db créée à côté
 

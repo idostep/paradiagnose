@@ -302,7 +302,7 @@ SEC_HEADERS = {
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'same-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    'Content-Security-Policy': "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com 'self'; img-src 'self' data:; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    'Content-Security-Policy': "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com 'self'; img-src 'self' data:; manifest-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
 }
 
 class H(BaseHTTPRequestHandler):
@@ -513,6 +513,15 @@ class H(BaseHTTPRequestHandler):
                 if VOTER_RE.match(voter):
                     mine = {r['key']: r['vote'] for r in c.execute("SELECT key, vote FROM votes WHERE voter=?", (voter,))}
                 return self.send(200, {'counts': counts_for(c), 'mine': mine})
+        if u.path == '/manifest.webmanifest':
+            m = {'name': 'Diagnose parasitaire', 'short_name': 'Diagnose', 'description': "Clé d'identification parasitologique (UC 321)", 'lang': 'fr', 'start_url': '/', 'scope': '/',
+                 'display': 'standalone', 'background_color': '#14302A', 'theme_color': '#14302A',
+                 'icons': [{'src': '/assets/icon-192.png', 'sizes': '192x192', 'type': 'image/png'}, {'src': '/assets/icon-512.png', 'sizes': '512x512', 'type': 'image/png'},
+                           {'src': '/assets/icon-maskable-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'maskable'}]}
+            return self.send(200, m, 'application/manifest+json; charset=utf-8', extra={'Cache-Control': 'public, max-age=86400'})
+        if u.path in ('/favicon.ico', '/apple-touch-icon.png'):
+            p = os.path.join(HERE, 'assets', 'icon-32.png' if u.path == '/favicon.ico' else 'apple-touch-icon.png')
+            if os.path.isfile(p): return self.send(200, open(p, 'rb').read(), 'image/png', extra={'Cache-Control': 'public, max-age=604800'})
         if u.path == '/admin':
             p = os.path.join(HERE, 'admin.html')
             if os.path.exists(p): return self.send(200, open(p, 'rb').read(), 'text/html; charset=utf-8')
