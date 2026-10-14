@@ -47,3 +47,11 @@ Fais un export de temps en temps (ou `cp cle.db sauvegarde.db` serveur arrêté)
 ## Règles actuelles (dans index.html)
 Drapeau « distinctif » dès que likes − dislikes ≥ 3 (il disparaît si le score retombe) · critère masqué quand likes − dislikes ≤ −3 · critère du poly sorti dès 1 like net.
 Un visiteur = un identifiant anonyme stocké dans son navigateur (1 vote par critère, like et dislike exclusifs).
+
+
+## Statistiques (onglet « Stats » de l'admin)
+
+- Chaque ouverture de la clé enregistre **un visiteur par appareil et par jour** (identifiant anonyme déjà gardé sur l'appareil, pas d'IP ni de nom). Tables `visits` et `visits_h`, incluses dans les exports JSON / .db.
+- L'onglet montre le nombre d'utilisateurs aujourd'hui, sur 7 et 30 jours, un graphique par jour (7 / 30 / 90 jours) avec la courbe des « actifs » (ceux qui ont voté, signalé ou proposé), et un graphique heure par heure pour aujourd'hui.
+- Le suivi démarre au premier jour où le nouveau `server.py` tourne : avant, seuls les actifs sont connus (reconstitués depuis les dates des votes).
+- Les jours sont comptés à l'heure locale du serveur. Redémarrer le serveur après avoir remplacé `server.py`.

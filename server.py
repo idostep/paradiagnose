@@ -166,7 +166,7 @@ def login_blocked(ip):
     tot = sum(1 for v in LOGIN_HITS.values() for t in v if now - t < 300)
     return len(h) >= 8 or tot >= 40      # par IP, et au total (IP falsifiées)
 
-SYNC_TABLES = ['meta', 'nodes', 'node_kids', 'items', 'node_images', 'glossary', 'votes', 'suggestions', 'reports', 'adjust', 'voters']
+SYNC_TABLES = ['meta', 'nodes', 'node_kids', 'items', 'node_images', 'glossary', 'votes', 'suggestions', 'reports', 'adjust', 'voters', 'visits', 'visits_h']
 
 def export_db_bytes():
     """copie cohérente de la base, SANS les comptes admin ni les sessions"""
@@ -251,6 +251,45 @@ def import_db_bytes(data):
         return counts, os.path.basename(backup)
     finally:
         os.remove(tmp)
+
+def ensure_visits(c):
+    c.execute("CREATE TABLE IF NOT EXISTS visits(day TEXT, voter TEXT, first_ts INTEGER, last_ts INTEGER, hits INTEGER DEFAULT 1, PRIMARY KEY(day,voter))")
+    c.execute("CREATE TABLE IF NOT EXISTS visits_h(day TEXT, hour INTEGER, voter TEXT, PRIMARY KEY(day,hour,voter))")
+
+def record_visit(c, voter):
+    """une ligne par visiteur et par jour (heure locale du serveur) : sert aux statistiques de l'admin"""
+    now = int(time.time()); lt = time.localtime(now); day = time.strftime('%Y-%m-%d', lt)
+    ensure_visits(c)
+    if not c.execute("SELECT 1 FROM visits WHERE day=? AND voter=?", (day, voter)).fetchone():
+        if c.execute("SELECT COUNT(*) FROM visits WHERE day=?", (day,)).fetchone()[0] >= 20000: return   # garde-fou anti-abus
+        c.execute("INSERT INTO visits(day,voter,first_ts,last_ts,hits) VALUES(?,?,?,?,1)", (day, voter, now, now))
+    else:
+        c.execute("UPDATE visits SET last_ts=?, hits=hits+1 WHERE day=? AND voter=?", (now, day, voter))
+    c.execute("INSERT OR IGNORE INTO visits_h(day,hour,voter) VALUES(?,?,?)", (day, lt.tm_hour, voter))
+
+def stats_for(c, days):
+    import datetime
+    ensure_visits(c)
+    days = max(1, min(int(days), 365)); today = datetime.date.today()
+    lst = [(today - datetime.timedelta(days=i)).isoformat() for i in range(days - 1, -1, -1)]
+    vis = {r[0]: (r[1], r[2]) for r in c.execute("SELECT day, COUNT(*), SUM(hits) FROM visits GROUP BY day")}
+    first = {}
+    for r in c.execute("SELECT voter, MIN(day) FROM visits GROUP BY voter"): first[r[1]] = first.get(r[1], 0) + 1
+    act = {r[0]: r[1] for r in c.execute("""SELECT day, COUNT(DISTINCT voter) FROM (
+        SELECT date(ts,'unixepoch','localtime') day, voter FROM votes WHERE ts IS NOT NULL
+        UNION ALL SELECT date(ts,'unixepoch','localtime'), voter FROM reports WHERE ts IS NOT NULL
+        UNION ALL SELECT date(ts,'unixepoch','localtime'), voter FROM suggestions WHERE ts IS NOT NULL
+        UNION ALL SELECT date(ts,'unixepoch','localtime'), voter FROM voters WHERE ts IS NOT NULL) WHERE day IS NOT NULL GROUP BY day""")}
+    daily = [{'day': d, 'visitors': vis.get(d, (0, 0))[0], 'opens': vis.get(d, (0, 0))[1] or 0, 'new': first.get(d, 0), 'active': act.get(d, 0)} for d in lst]
+    td = today.isoformat()
+    hrs = {r[0]: r[1] for r in c.execute("SELECT hour, COUNT(*) FROM visits_h WHERE day=? GROUP BY hour", (td,))}
+    def uniq(n):
+        since = (today - datetime.timedelta(days=n - 1)).isoformat()
+        return c.execute("SELECT COUNT(DISTINCT voter) FROM visits WHERE day>=?", (since,)).fetchone()[0]
+    return {'today': td, 'daily': daily, 'hours': [hrs.get(h, 0) for h in range(24)],
+            'tracked_since': (c.execute("SELECT MIN(day) FROM visits").fetchone()[0]),
+            'totals': {'today': uniq(1), 'd7': uniq(7), 'd30': uniq(30), 'all': c.execute("SELECT COUNT(DISTINCT voter) FROM visits").fetchone()[0],
+                       'engaged': c.execute("SELECT COUNT(DISTINCT voter) FROM (SELECT voter FROM votes UNION SELECT voter FROM reports UNION SELECT voter FROM suggestions UNION SELECT voter FROM voters)").fetchone()[0]}}
 
 def counts_for(c, key=None):
     q = "SELECT key, vote, COUNT(*) n FROM votes" + (" WHERE key=?" if key else "") + " GROUP BY key, vote"
@@ -345,6 +384,10 @@ class H(BaseHTTPRequestHandler):
 
     def admin_get(self, path, q):
         with db() as c:
+            if path == '/api/admin/stats':
+                try: n = int((q.get('days') or ['30'])[0])
+                except ValueError: n = 30
+                return self.send(200, stats_for(c, n))
             if path == '/api/admin/nodes':
                 return self.send(200, [dict(r) for r in c.execute("SELECT id, t, fam FROM nodes ORDER BY t")])
             if path == '/api/admin/items':
@@ -534,6 +577,8 @@ class H(BaseHTTPRequestHandler):
             with db() as c:
                 mine = {}
                 if VOTER_RE.match(voter):
+                    try: record_visit(c, voter)
+                    except Exception: pass
                     mine = {r['key']: r['vote'] for r in c.execute("SELECT key, vote FROM votes WHERE voter=?", (voter,))}
                 return self.send(200, {'counts': counts_for(c), 'mine': mine})
         if u.path == '/manifest.webmanifest':

@@ -46,15 +46,15 @@ button.b.d{color:var(--red);border-color:var(--red)}button.b.d:hover{background:
 #login{max-width:360px;margin:12vh auto;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px}
 #login h2{font-family:var(--display);font-weight:800;font-size:28px;margin:0 0 4px}#login p{margin:0 0 12px;color:var(--ink2);font-size:14.5px}
 #login input{width:100%;margin:5px 0}#login .err{color:var(--red);min-height:1.3em;font-size:14.5px}
-</style></head><body>
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0}.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}.tile b{display:block;font:800 30px var(--display);color:var(--green)}.tile span{color:var(--ink2);font-size:13.5px}.range2{display:flex;gap:6px;margin:6px 0 12px}.lg{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-1px}.lg.g{background:var(--green)}.lg.a{background:var(--aca)}</style></head><body>
 <div id="login" hidden><h2>Administration</h2><p>Diagnose parasitaire · accès réservé</p>
 <form id="lf"><input type="text" id="lu" placeholder="Identifiant" autocomplete="username" required><input type="password" id="lp" placeholder="Mot de passe" autocomplete="current-password" required>
 <div class="err" id="le"></div><button class="b p" style="width:100%">Se connecter</button></form></div>
 <div id="app" hidden>
 <header class="top"><h1>Administration</h1><span class="who" id="who"></span><a class="b" href="/" id="site" style="text-decoration:none;display:inline-block">← Voir le site</a><button class="b" id="out">Se déconnecter</button></header>
-<nav class="tabs"><div class="in"><button data-t="sg">Suggestions <span class="bd" id="bsg" hidden></span></button><button data-t="rp">Signalements <span class="bd" id="brp" hidden></span></button><button data-t="vt">Votes</button><button data-t="ed">Critères</button><button data-t="db">Base de données</button></div></nav>
+<nav class="tabs"><div class="in"><button data-t="sg">Suggestions <span class="bd" id="bsg" hidden></span></button><button data-t="rp">Signalements <span class="bd" id="brp" hidden></span></button><button data-t="vt">Votes</button><button data-t="st">Stats</button><button data-t="ed">Critères</button><button data-t="db">Base de données</button></div></nav>
 <div class="range" id="range" hidden></div>
-<main><section id="sg"></section><section id="rp" hidden></section><section id="vt" hidden></section><section id="ed" hidden></section><section id="db" hidden></section></main></div>
+<main><section id="sg"></section><section id="rp" hidden></section><section id="vt" hidden></section><section id="st" hidden></section><section id="ed" hidden></section><section id="db" hidden></section></main></div>
 <div id="toast"></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -79,8 +79,28 @@ function start(u){$('login').hidden=true;$('app').hidden=false;$('who').textCont
 /* ---------- onglets ---------- */
 let CUR='sg';
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.t));
-function show(k){CUR=k;$('range').hidden=!['sg','rp','vt'].includes(k);['sg','rp','vt','ed','db'].forEach(x=>$(x).hidden=x!==k);document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===k));
- if(k==='ed'&&!$('ed').dataset.ok)initEd();if(k==='vt')loadVotes();if(k==='db')renderDb()}
+function show(k){CUR=k;$('range').hidden=!['sg','rp','vt'].includes(k);['sg','rp','vt','st','ed','db'].forEach(x=>$(x).hidden=x!==k);document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===k));
+ if(k==='ed'&&!$('ed').dataset.ok)initEd();if(k==='vt')loadVotes();if(k==='st')loadStats();if(k==='db')renderDb()}
+
+/* ---------- statistiques ---------- */
+let SD=30;
+const fdate=d=>{const [y,m,j]=d.split('-');return j+'/'+m};
+function barSvg(vals,labels,o){const W=720,H=o.h||220,L=34,B=26,T=10,R=6,n=vals.length,mx=Math.max(1,...vals,...(o.line||[0]));const step=mx<=5?1:mx<=10?2:mx<=50?10:mx<=100?20:Math.pow(10,Math.floor(Math.log10(mx)));
+ const bw=(W-L-R)/n,sy=v=>T+(H-T-B)*(1-v/(Math.ceil(mx/step)*step));let g='';
+ for(let v=0;v<=Math.ceil(mx/step)*step;v+=step){g+=`<line x1="${L}" x2="${W-R}" y1="${sy(v)}" y2="${sy(v)}" stroke="currentColor" opacity=".15"/><text x="${L-5}" y="${sy(v)+4}" text-anchor="end" font-size="11" fill="currentColor" opacity=".7">${v}</text>`}
+ vals.forEach((v,i)=>{const x=L+i*bw+bw*.12,w=bw*.76,y=sy(v);g+=`<rect x="${x}" y="${y}" width="${w}" height="${Math.max(0,sy(0)-y)}" rx="2" fill="var(--green)"><title>${labels[i].t} : ${v}${o.unit||''}</title></rect>`;
+  if(n<=14||n===24||i%Math.ceil(n/14)===0)g+=`<text x="${x+w/2}" y="${H-8}" text-anchor="middle" font-size="10.5" fill="currentColor" opacity=".75">${labels[i].s}</text>`});
+ if(o.line){const pts=o.line.map((v,i)=>[L+i*bw+bw/2,sy(v)]);g+=`<polyline fill="none" stroke="var(--aca)" stroke-width="2.2" points="${pts.map(p=>p.join(',')).join(' ')}"/>`+pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="var(--aca)"><title>${labels[i].t} : ${o.line[i]} actifs</title></circle>`).join('')}
+ return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${o.aria||''}" style="display:block;color:var(--ink)">${g}</svg>`}
+async function loadStats(){const root=$('st');const d=await get('/api/admin/stats?days='+SD);root.innerHTML='';
+ const T=d.totals,tiles=el('div',{class:'tiles'});[['Aujourd’hui',T.today],['7 derniers jours',T.d7],['30 derniers jours',T.d30],['Depuis le début du suivi',T.all]].forEach(([l,v])=>tiles.append(el('div',{class:'tile'},el('b',{},String(v)),el('span',{},l))));
+ const bar=el('div',{class:'range2'},[7,30,90].map(n=>el('button',{class:'b'+(n===SD?' p':''),on:{click:()=>{SD=n;loadStats()}}},n+' jours')));
+ const labs=d.daily.map(x=>({s:fdate(x.day),t:x.day.split('-').reverse().join('/')+' : '+x.visitors+' visiteur'+(x.visitors>1?'s':'')+(x.new?' ('+x.new+' nouveau'+(x.new>1?'x':'')+')':'')}));
+ const c1=el('div',{class:'card'});c1.innerHTML='<h3>Utilisateurs par jour</h3><p class="meta"><span class="lg g"></span> visiteurs uniques (appareils qui ont ouvert la clé) &nbsp; <span class="lg a"></span> actifs (ont voté, signalé ou proposé)</p>'+barSvg(d.daily.map(x=>x.visitors),labs,{line:d.daily.map(x=>x.active),aria:'Visiteurs par jour'});
+ const hl=d.hours.map((v,h)=>({s:String(h).padStart(2,'0'),t:h+' h : '+v}));
+ const c2=el('div',{class:'card'});c2.innerHTML='<h3>Aujourd’hui, heure par heure</h3><p class="meta">Visiteurs uniques par heure, '+d.today.split('-').reverse().join('/')+'</p>'+barSvg(d.hours,hl,{h:170,aria:'Visiteurs par heure aujourd’hui'});
+ const note=el('p',{class:'meta'},(d.tracked_since?'Le suivi des visites a commencé le '+d.tracked_since.split('-').reverse().join('/')+' : avant, seuls les « actifs » sont connus. ':'Le suivi des visites vient de démarrer : les premières barres apparaîtront dès les prochaines ouvertures. ')+'Un utilisateur = un appareil/navigateur (identifiant gardé sur l’appareil) ; '+T.engaged+' ont déjà voté, signalé ou proposé un critère.');
+ root.append(tiles,bar,c1,c2,note)}
 /* ---------- plage de dates (suggestions, signalements, votes) ---------- */
 let DF='',DT='';
 const inR=ts=>{const t=ts*1000;if(DF&&t<new Date(DF+'T00:00:00').getTime())return false;if(DT&&t>=new Date(DT+'T00:00:00').getTime()+864e5)return false;return true};
