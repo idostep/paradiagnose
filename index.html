@@ -361,7 +361,7 @@ footer{color:var(--ink2);font-size:13px;margin-top:28px}
   <section class="view" id="v-map">
     <div class="map2d" id="map2d" aria-label="Arbre en 2D : glisse pour te déplacer, pince ou molette pour zoomer">
       <div class="mworld" id="mworld"></div>
-      <div class="mctl"><button type="button" data-m="in" aria-label="Zoom avant">＋</button><button type="button" data-m="out" aria-label="Zoom arrière">−</button><button type="button" data-m="fit">Tout voir</button><button type="button" data-m="root">Début</button><button type="button" data-m="all" hidden>Tout afficher</button><label class="mgen" hidden>Générations filles : <b class="mgv">4</b> <input type="range" min="1" max="10" value="4" aria-label="Nombre de générations filles"></label></div>
+      <div class="mctl"><button type="button" data-m="in" aria-label="Zoom avant">＋</button><button type="button" data-m="out" aria-label="Zoom arrière">−</button><button type="button" data-m="fit">Tout voir</button><button type="button" data-m="root">Début</button><button type="button" data-m="fold">Tout replier</button><button type="button" data-m="all" hidden>Tout afficher</button><label class="mgen" hidden>Générations filles : <b class="mgv">4</b> <input type="range" min="1" max="10" value="4" aria-label="Nombre de générations filles"></label></div>
       <div class="mhint">Glisse pour te déplacer · pince ou molette pour zoomer · touche un nœud pour voir tous ses critères</div>
     </div>
   </section>
@@ -766,7 +766,7 @@ document.addEventListener('keydown', e=>{
  function fit(){ const r=vp.getBoundingClientRect(); const k=Math.min(r.width/(WW+40),(r.height-70)/(WH+20),1); S.k=Math.max(.12,k); S.x=Math.max(10,(r.width-WW*S.k)/2); S.y=64; apply(); }
  function toRoot(){ const r=vp.getBoundingClientRect(); S.k=.8; S.x=r.width/2-ROOTX*S.k; S.y=70; apply(); }
  vp.querySelector('.mctl').addEventListener('click',e=>{ const b=e.target.closest('[data-m]'); if(!b) return; const r=vp.getBoundingClientRect(), m=b.dataset.m;
-   if(m==='all') setFocus(null); else if(m==='in') zoomAt(1.3,r.width/2,r.height/2); else if(m==='out') zoomAt(1/1.3,r.width/2,r.height/2); else if(m==='fit') fit(); else if(m==='root') toRoot(); });
+   if(m==='fold'){ opened.clear(); refresh(); } else if(m==='all') setFocus(null); else if(m==='in') zoomAt(1.3,r.width/2,r.height/2); else if(m==='out') zoomAt(1/1.3,r.width/2,r.height/2); else if(m==='fit') fit(); else if(m==='root') toRoot(); });
  vp.querySelector('.mgen input').addEventListener('input',e=>{ gens=+e.target.value; vp.querySelector('.mgv').textContent=gens; if(focus){ const r=vp.getBoundingClientRect(); layout(); } });
  vp.addEventListener('wheel',e=>{ e.preventDefault(); const r=vp.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?.01:.0015)),e.clientX-r.left,e.clientY-r.top); },{passive:false});
  const ptr=new Map(); let moved=false, last=0, sx=0, sy=0;
