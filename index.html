@@ -331,7 +331,7 @@ footer{color:var(--ink2);font-size:13px;margin-top:28px}
 .mn.leaf{background:var(--fam-s);font-weight:600}
 .mn.root{background:var(--green);color:#fff;border-color:var(--green);font-weight:700}
 .mn:hover,.mn.hl{outline:3px solid var(--fam);outline-offset:1px}
-.mn .mt,.mn .mh b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:14px;line-height:1.15}.mn .mh{display:flex;align-items:center;gap:7px}.mn .mh img{width:58px;height:58px;object-fit:cover;border-radius:6px;flex:none}.mn ul{list-style:none;margin:0;padding:0;font-size:11.5px;line-height:1.3;color:var(--ink2);font-weight:400}.mn.root ul{color:#fff}.mn li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mn .fd,.mn .pd,.mn .wd{margin-right:2px}
+.mn .mt,.mn .mh b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:14px;line-height:1.15}.mn .mh{display:flex;align-items:center;gap:7px}.mn .mh img{width:58px;height:58px;object-fit:cover;border-radius:6px;flex:none}.mn ul{list-style:none;margin:0;padding:0;font-size:11.5px;line-height:1.3;color:var(--ink2);font-weight:400}.mn.root ul{color:#fff}.mn li{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mn .fd,.mn .pd,.mn .wd{margin-right:2px}.mn img.big{display:block;width:100%;height:136px;object-fit:contain;margin-top:4px;border-radius:6px;background:var(--card)}
 .mtph{position:absolute;box-sizing:border-box;width:250px;height:52px;display:flex;align-items:center;line-height:1.15;padding:4px 12px;border-radius:10px;background:var(--fam);color:#fff;font-weight:700;font-size:15px}
 .mtpc{position:absolute;box-sizing:border-box;width:250px;height:58px;display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);border-left:5px solid var(--fam);border-radius:10px;background:var(--card);color:var(--ink);font:inherit;font-size:13.5px;line-height:1.2;text-align:left;cursor:pointer}
 .mtpc img{width:46px;height:46px;object-fit:cover;border-radius:6px;flex:none;background:var(--fam-s)}
@@ -712,9 +712,9 @@ document.addEventListener('keydown', e=>{
  let built=false, WW=0, WH=0, TPX=0, ROOTY=0; const S={x:16,y:60,k:.6};
  function apply(){ world.style.transform='translate('+S.x+'px,'+S.y+'px) scale('+S.k+')'; }
  function zoomAt(f,cx,cy){ const k=Math.max(.12,Math.min(2.2,S.k*f)); const r=k/S.k; S.x=cx-(cx-S.x)*r; S.y=cy-(cy-S.y)*r; S.k=k; apply(); }
- const HH=id=>{const n=N[id];return (n.tab&&n.tab.length)?NH:(isLeaf(id)?70:50)};
+ const HH=id=>{const n=N[id],im=isLeaf(id)&&firstImg(id);return (n.tab&&n.tab.length)?NH+(im?122:0):(im?190:(isLeaf(id)?70:50))};
  function nodeInner(id,lf){ const n=N[id], f=lf?firstImg(id):null, cr=(n.tab||[]).slice(0,lf?3:4);
-  return (lf?'<div class="mh">'+(f?'<img src="'+IMG[f[0]]+'" alt="" loading="lazy">':'')+'<b>'+name(id)+'</b></div>':'<b class="mt">'+name(id)+'</b>')+(cr.length?'<ul>'+cr.map(x=>'<li>'+mark(x)+esc(clean(x))+'</li>').join('')+'</ul>':''); }
+  return '<b class="mt">'+name(id)+'</b>'+(cr.length?'<ul>'+cr.map(x=>'<li>'+mark(x)+esc(clean(x))+'</li>').join('')+'</ul>':'')+(f?'<img class="big" src="'+IMG[f[0]]+'" alt="" loading="lazy">':''); }
  function build(){
   if(built) return; built=true;
   const pos={}, seen=new Set(); let row=0, maxd=0; const order=[];
